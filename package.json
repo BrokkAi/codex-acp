@@ -1,9 +1,9 @@
 {
-  "name": "@agentclientprotocol/codex-acp",
+  "name": "@brokkai/codex-acp",
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "",
   "main": "dist/index.js",
   "bin": {
@@ -37,20 +37,19 @@
     "example:steering": "node --import tsx examples/steering.ts",
     "example:steering:multistep": "node --import tsx examples/steering.ts",
     "generate-types": "./node_modules/.bin/codex app-server generate-ts --out src/app-server",
-    "release:preflight": "bash scripts/release-preflight.sh",
     "test": "vitest run --no-file-parallelism --retry=2",
     "test:e2e": "npm run build && RUN_E2E_TESTS=true vitest run --no-file-parallelism --retry=2 src/__tests__/CodexACPAgent/e2e",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p examples/tsconfig.json",
     "codex-test": "tsx .claude/skills/run-codex/scripts/run-codex-test.ts"
   },
-  "homepage": "https://github.com/agentclientprotocol/codex-acp#readme",
+  "homepage": "https://github.com/BrokkAi/codex-acp#readme",
   "bugs": {
-    "url": "https://github.com/agentclientprotocol/codex-acp/issues"
+    "url": "https://github.com/BrokkAi/codex-acp/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agentclientprotocol/codex-acp.git"
+    "url": "git+https://github.com/BrokkAi/codex-acp.git"
   },
   "keywords": [],
   "author": "Agent Client Protocol",
@@ -66,7 +65,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.4.0",
-    "@openai/codex": "^0.153.4",
+    "@openai/codex": "0.153.4",
     "diff": "^9.0.0",
     "open": "^11.0.1",
     "vscode-jsonrpc": "^9.0.1",

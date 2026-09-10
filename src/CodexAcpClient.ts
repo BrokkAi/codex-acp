@@ -612,6 +612,10 @@ export class CodexAcpClient {
         await this.refreshSkills(request.cwd, additionalDirectories);
 
         const response = await this.codexClient.threadStart({
+            // Codex 0.153.4 supports these experimental roots (enabled at initialize).
+            // Named profiles use them without flattening their filesystem rules.
+            ...(additionalDirectories.length > 0
+                ? {runtimeWorkspaceRoots: [request.cwd, ...additionalDirectories]} : {}),
             config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers),
             modelProvider: this.getModelProvider(),
             cwd: request.cwd,
@@ -754,7 +758,37 @@ export class CodexAcpClient {
                 trust_level: "trusted",
             }])),
         };
-        const configWithWorkspaceRoots = mergeSandboxWorkspaceWriteRoots(mergedConfig, additionalDirectories);
+        const initialMode = AgentMode.getInitialAgentMode();
+        const modeConfig: JsonObject = {
+            ...mergedConfig,
+            approval_policy: initialMode.approvalPolicy,
+            approvals_reviewer: initialMode.approvalsReviewer,
+            ...(initialMode === AgentMode.AgentFullAccess
+                ? {default_permissions: ":danger-full-access"}
+                : {}),
+        };
+        // Additional directories must extend the host's roots, not replace them.
+        const effectiveConfig: JsonObject = additionalDirectories.length > 0
+            ? (await this.codexClient.configRead({includeLayers: false, cwd: projectPath})).config
+            : {};
+        const inheritedSandbox = isJsonObject(effectiveConfig["sandbox_workspace_write"])
+            ? effectiveConfig["sandbox_workspace_write"] : {};
+        const configuredSandbox = isJsonObject(modeConfig["sandbox_workspace_write"])
+            ? modeConfig["sandbox_workspace_write"] : {};
+        const configWithWorkspaceRoots = mergeSandboxWorkspaceWriteRoots(
+            additionalDirectories.length > 0 ? {
+                ...modeConfig,
+                sandbox_workspace_write: {
+                    ...inheritedSandbox,
+                    ...configuredSandbox,
+                    writable_roots: uniqueStrings([
+                        ...(Array.isArray(inheritedSandbox["writable_roots"]) ? inheritedSandbox["writable_roots"].filter((root): root is string => typeof root === "string") : []),
+                        ...(Array.isArray(configuredSandbox["writable_roots"]) ? configuredSandbox["writable_roots"].filter((root): root is string => typeof root === "string") : []),
+                    ]),
+                },
+            } : modeConfig,
+            additionalDirectories,
+        );
         if (mcpServers.length === 0) {
             return configWithWorkspaceRoots;
         }
@@ -955,7 +989,10 @@ export class CodexAcpClient {
             input: input,
             approvalPolicy: agentMode.approvalPolicy,
             approvalsReviewer: agentMode.approvalsReviewer,
-            sandboxPolicy: addAdditionalDirectoriesToSandboxPolicy(agentMode.sandboxPolicy, additionalDirectories),
+            // Guardian retains the sandbox resolved by Codex, including named profiles.
+            ...(agentMode === AgentMode.Agent ? {} : {
+                sandboxPolicy: addAdditionalDirectoriesToSandboxPolicy(agentMode.sandboxPolicy, additionalDirectories),
+            }),
             summary: disableSummary ? "none" : "auto",
             effort: effort,
             model: modelId.model,

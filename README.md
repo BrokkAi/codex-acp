@@ -1,3 +1,5 @@
+> BrokkAi's downstream adapter for Mjolnir. Install `@brokkai/codex-acp`; the executable remains `codex-acp`. Guardian preserves configured Codex sandbox grants across prompts. Releases are maintained at https://github.com/BrokkAi/codex-acp/releases.
+
 # ACP adapter for Codex CLI
 
 [![npm version](https://img.shields.io/npm/v/%40agentclientprotocol%2Fcodex-acp)](https://www.npmjs.com/package/@agentclientprotocol/codex-acp)
@@ -25,7 +27,7 @@ Use [OpenAI Codex](https://github.com/openai/codex) from [Agent Client Protocol]
 Run the published package directly:
 
 ```bash
-npx -y @agentclientprotocol/codex-acp
+npx -y @brokkai/codex-acp
 ```
 
 Or install it globally:
@@ -38,7 +40,7 @@ codex-acp --version
 The npm package includes a compatible `@openai/codex` dependency. Set `CODEX_PATH` only when you want the adapter to run a different Codex binary:
 
 ```bash
-CODEX_PATH=/path/to/codex npx -y @agentclientprotocol/codex-acp
+CODEX_PATH=/path/to/codex npx -y @brokkai/codex-acp
 ```
 
 To try changes that have landed on `main` but are not released yet, install from the
@@ -48,7 +50,7 @@ replace queued previews. See
 [docs/RELEASES.md](docs/RELEASES.md#preview-releases).
 
 ```bash
-npx -y @agentclientprotocol/codex-acp@preview
+npx -y @brokkai/codex-acp@preview
 ```
 
 ## Authentication

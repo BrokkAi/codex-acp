@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.1 (BrokkAi fork)
+
+- Preserve configured guardian sandbox grants across prompts and establish guardian/yolo approval policy at startup.
+- Publish the downstream adapter as `@brokkai/codex-acp` with an exact Codex dependency and tag-triggered releases.
+
+
 ## [1.11.0](https://github.com/agentclientprotocol/codex-acp/compare/v1.10.0...v1.11.0) (2026-09-09)
 
 

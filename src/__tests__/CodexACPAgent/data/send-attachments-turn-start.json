@@ -48,13 +48,6 @@
     ],
     "approvalPolicy": "on-request",
     "approvalsReviewer": "approvalsReviewer",
-    "sandboxPolicy": {
-      "type": "workspaceWrite",
-      "writableRoots": [],
-      "networkAccess": false,
-      "excludeTmpdirEnvVar": false,
-      "excludeSlashTmp": false
-    },
     "summary": "auto",
     "effort": "effort",
     "model": "model",

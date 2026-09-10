@@ -425,6 +425,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         const mockFixture = createCodexMockTestFixture();
         const codexAcpClient = mockFixture.getCodexAcpClient();
         const codexAppServerClient = mockFixture.getCodexAppServerClient();
+        vi.spyOn(codexAppServerClient, "configRead").mockResolvedValue({config: {}} as any);
 
         const listSkillsSpy = vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({ data: [] });
         const threadStartSpy = vi.spyOn(codexAppServerClient, "threadStart").mockResolvedValue({
@@ -479,6 +480,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         const mockFixture = createCodexMockTestFixture();
         const codexAcpClient = mockFixture.getCodexAcpClient();
         const codexAppServerClient = mockFixture.getCodexAppServerClient();
+        vi.spyOn(codexAppServerClient, "configRead").mockResolvedValue({config: {}} as any);
 
         const extraRootsSetSpy = vi.spyOn(codexAppServerClient, "skillsExtraRootsSet").mockResolvedValue(undefined);
         const listSkillsSpy = vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({data: []});
@@ -527,6 +529,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         const mockFixture = createCodexMockTestFixture();
         const codexAcpClient = mockFixture.getCodexAcpClient();
         const codexAppServerClient = mockFixture.getCodexAppServerClient();
+        vi.spyOn(codexAppServerClient, "configRead").mockResolvedValue({config: {}} as any);
 
         vi.spyOn(codexAppServerClient, "skillsExtraRootsSet").mockResolvedValue(undefined);
         vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({data: []});
@@ -574,6 +577,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         const mockFixture = createCodexMockTestFixture();
         const codexAcpClient = mockFixture.getCodexAcpClient();
         const codexAppServerClient = mockFixture.getCodexAppServerClient();
+        vi.spyOn(codexAppServerClient, "configRead").mockResolvedValue({config: {}} as any);
 
         vi.spyOn(codexAppServerClient, "skillsExtraRootsSet").mockResolvedValue(undefined);
         vi.spyOn(codexAppServerClient, "listSkills").mockResolvedValue({data: []});
@@ -1064,7 +1068,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         expect(listSkillsSpy.mock.invocationCallOrder[0]!).toBeLessThan(turnStartSpy.mock.invocationCallOrder[0]!);
     });
 
-    it('applies ACP additional directories to turn skill discovery and sandbox policy', async () => {
+    it('applies ACP additional directories to skills without overwriting the configured guardian sandbox', async () => {
         const mockFixture = createCodexMockTestFixture();
         const codexAcpAgent = mockFixture.getCodexAcpAgent();
         const codexAppServerClient = mockFixture.getCodexAppServerClient();
@@ -1098,10 +1102,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             cwds: ["/workspace", "/workspace/extra"],
             forceReload: true,
         });
-        expect(turnStartSpy.mock.calls[0]![0].sandboxPolicy).toMatchObject({
-            type: "workspaceWrite",
-            writableRoots: ["/workspace/extra"],
-        });
+        expect(turnStartSpy.mock.calls[0]![0].sandboxPolicy).toBeUndefined();
         expect(turnStartSpy.mock.calls[0]![0].approvalsReviewer).toBe("auto_review");
     });
 
