@@ -752,25 +752,31 @@ export class CodexAcpClient {
             apiType: activeProvider.apiType,
             baseUrl: activeProvider.baseUrl,
         });
-        const mergedConfig = {
+        const mergedConfig: JsonObject = {
             ...mergeGatewayConfig(this.config, this.gatewayConfig),
             projects: Object.fromEntries(sessionRoots.map(root => [root, {
                 trust_level: "trusted",
             }])),
         };
         const initialMode = AgentMode.getInitialAgentMode();
+        const effectiveConfig: JsonObject = initialMode === AgentMode.Agent || additionalDirectories.length > 0
+            ? (await this.codexClient.configRead({includeLayers: false, cwd: projectPath})).config
+            : {};
+        const profile = mergedConfig["default_permissions"] ?? effectiveConfig["default_permissions"];
+        const sandbox = mergedConfig["sandbox_mode"] ?? effectiveConfig["sandbox_mode"];
         const modeConfig: JsonObject = {
             ...mergedConfig,
             approval_policy: initialMode.approvalPolicy,
             approvals_reviewer: initialMode.approvalsReviewer,
             ...(initialMode === AgentMode.AgentFullAccess
                 ? {default_permissions: ":danger-full-access"}
-                : {}),
+                : initialMode === AgentMode.Agent
+                    ? typeof profile === "string" && profile !== ":danger-full-access"
+                        ? {default_permissions: profile}
+                        : {sandbox_mode: sandbox === "read-only" ? "read-only" : "workspace-write"}
+                    : {}),
         };
         // Additional directories must extend the host's roots, not replace them.
-        const effectiveConfig: JsonObject = additionalDirectories.length > 0
-            ? (await this.codexClient.configRead({includeLayers: false, cwd: projectPath})).config
-            : {};
         const inheritedSandbox = isJsonObject(effectiveConfig["sandbox_workspace_write"])
             ? effectiveConfig["sandbox_workspace_write"] : {};
         const configuredSandbox = isJsonObject(modeConfig["sandbox_workspace_write"])

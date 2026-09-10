@@ -7,7 +7,6 @@
 - `src/app-server/` — generated Codex app-server API types (regenerate via `npm run generate-types`).
 - `dist/bin/` — release-ready single-file executables and `*.zip` archives.
 - `.github/workflows/ci.yml` — CI mirrors the local workflow: typecheck → tests → bundle.
-- `scripts/` — release tooling (`release-preflight.sh`, `next-preview-version.mjs`), kept outside `src/` so it stays out of `tsc`'s `rootDir` and the published tarball; its tests sit next to it as `*.test.mjs`.
 
 ## Coding Style & Naming Conventions
 

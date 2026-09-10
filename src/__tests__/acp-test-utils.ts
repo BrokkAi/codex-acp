@@ -286,7 +286,7 @@ export function createCodexMockTestFixture(
     };
 
     const mockCodexConnection = {
-        sendRequest: () => Promise.resolve(undefined),
+        sendRequest: (method: string) => Promise.resolve(method === "config/read" ? {config: {}} : undefined),
         onUnhandledNotification: (handler: (notification: any) => void) => {
             unhandledNotificationHandler = handler;
         },

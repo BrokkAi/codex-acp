@@ -7,6 +7,24 @@ import {CodexAcpClient} from "../../CodexAcpClient";
 describe("Mj initial permission modes", () => {
     afterEach(() => vi.unstubAllEnvs());
 
+    it("gives a new untrusted worktree workspace access without erasing configured grants", async () => {
+        vi.stubEnv("INITIAL_AGENT_MODE", "agent");
+        const fixture = createCodexMockTestFixture();
+        const server = fixture.getCodexAppServerClient();
+        const client = fixture.getCodexAcpClient();
+        vi.spyOn(server, "listSkills").mockResolvedValue({data: []});
+        vi.spyOn(server, "listModels").mockResolvedValue({data: [createTestModel()], nextCursor: null});
+        vi.spyOn(server, "configRead").mockResolvedValue({config: {
+            sandbox_workspace_write: {writable_roots: ["/shared/cache"], network_access: true},
+        }} as any);
+        const start = vi.spyOn(server, "threadStart").mockResolvedValue({
+            thread: {id: "session"}, model: "gpt-5", reasoningEffort: "medium",
+        } as any);
+        await client.newSession({cwd: "/new/worktree", mcpServers: []});
+        expect(start.mock.calls[0]![0].config).toMatchObject({sandbox_mode: "workspace-write", approval_policy: "on-request", approvals_reviewer: "auto_review"});
+        expect(start.mock.calls[0]![0].config).not.toHaveProperty("sandbox_workspace_write");
+    });
+
     for (const mode of [AgentMode.Agent, AgentMode.AgentFullAccess]) {
         it(`establishes ${mode.id} and preserves it across ordinary prompts`, async () => {
             vi.stubEnv("INITIAL_AGENT_MODE", mode.id);

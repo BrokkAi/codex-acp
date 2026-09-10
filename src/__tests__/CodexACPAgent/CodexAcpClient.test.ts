@@ -96,6 +96,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             // Reads the connection auth identity for the `auth/status_update` push
             // when no session is open yet.
             "account/read",
+            "config/read",
             "thread/start",
             "model/list",
             "thread/started",
