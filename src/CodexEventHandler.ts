@@ -255,6 +255,11 @@ export class CodexEventHandler {
         }
     }
 
+    beginPrompt(): void {
+        this.failure = null;
+        this.completedPlan = null;
+    }
+
     getFailure(): RequestError | null {
         return this.failure;
     }
@@ -279,7 +284,7 @@ export class CodexEventHandler {
     }
 
     /**
-     * Handles notifications after the prompt-local handler has been disposed. The app-server subscription
+     * Handles notifications outside an ACP prompt. The app-server subscription
      * remains installed until the ACP session closes, so terminal errors need a durable session-level path
      * instead of entering a turn buffer that will never be flushed.
      */
@@ -480,12 +485,14 @@ export class CodexEventHandler {
                 this.sessionState.currentTurnId = notification.params.turn.id;
                 this.sessionState.promptTokenUsage.beginTurn(notification.params.turn.id);
                 await this.flushPendingErrors();
-                return null;
+                return this.executionUpdate("running", notification.params.turn.id);
             case "turn/completed":
+                if (this.sessionState.currentTurnId && this.sessionState.currentTurnId !== notification.params.turn.id) return null;
                 await this.flushPendingPlanUpdates();
                 this.clearPlanTurnState();
+                if (this.sessionState.currentTurnId && this.sessionState.currentTurnId !== notification.params.turn.id) return null;
                 this.sessionState.currentTurnId = null;
-                return null;
+                return this.executionUpdate("idle", notification.params.turn.id);
             case "thread/tokenUsage/updated":
                 return this.createUsageUpdate(notification.params);
             case "thread/name/updated":
@@ -612,6 +619,12 @@ export class CodexEventHandler {
             case "autoApprovalReview/strictReviewRequired":
                 return null;
         }
+    }
+
+    private executionUpdate(status: "running" | "idle", turnId: string): UpdateSessionEvent | null {
+        this.sessionState.executionRevision = (this.sessionState.executionRevision ?? 0) + 1;
+        if (!this.sessionState.executionUpdates) return null;
+        return {sessionUpdate: "session_info_update", _meta: {execution: {version: 1, revision: this.sessionState.executionRevision, status, turnId}}};
     }
 
     private createCodexSessionInfoUpdate(codexMetadata: Record<string, unknown>): UpdateSessionEvent {

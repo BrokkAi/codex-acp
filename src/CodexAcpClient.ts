@@ -531,6 +531,17 @@ export class CodexAcpClient {
         const additionalDirectories = readAdditionalDirectories(request.cwd, request.additionalDirectories, request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
+        const goalPolicy = request._meta?.["goal"] as {resumePolicy?: string} | undefined;
+        if (goalPolicy?.resumePolicy === "pause") {
+            const goal = await this.getGoal(request.sessionId);
+            if (goal?.status === "active") {
+                // This also works for an unloaded thread. Pause before resume
+                // can launch an autonomous continuation.
+                await this.codexClient.threadGoalSet({threadId: request.sessionId, status: "paused"});
+            }
+        }
+        this.subagents.prepare(request.sessionId);
+        onSubscribed?.();
         const response = await this.codexClient.threadResume({
             excludeTurns: true,
             config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? []),
@@ -538,7 +549,6 @@ export class CodexAcpClient {
             modelProvider: await this.getResumeModelProvider(),
             threadId: request.sessionId,
         });
-        onSubscribed?.();
         const codexModels = await this.fetchAvailableModels();
         const currentModelId = this.createModelId(codexModels, response.model, response.reasoningEffort).toString();
         return {
@@ -571,6 +581,17 @@ export class CodexAcpClient {
         const additionalDirectories = readAdditionalDirectories(request.cwd, request.additionalDirectories, request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
+        const goalPolicy = request._meta?.["goal"] as {resumePolicy?: string} | undefined;
+        if (goalPolicy?.resumePolicy === "pause") {
+            const goal = await this.getGoal(request.sessionId);
+            if (goal?.status === "active") {
+                // This also works for an unloaded thread. Pause before resume
+                // can launch an autonomous continuation.
+                await this.codexClient.threadGoalSet({threadId: request.sessionId, status: "paused"});
+            }
+        }
+        this.subagents.prepare(request.sessionId);
+        onSubscribed?.();
         const response = await this.codexClient.threadResume({
             excludeTurns: true,
             config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? []),
@@ -578,7 +599,6 @@ export class CodexAcpClient {
             modelProvider: await this.getResumeModelProvider(),
             threadId: request.sessionId,
         });
-        onSubscribed?.();
         // Resume cursors bound durable history; later turns arrive through live events.
         // A null paginated cursor means there was no durable history at resume time.
         const thread = response.thread.historyMode === "paginated"

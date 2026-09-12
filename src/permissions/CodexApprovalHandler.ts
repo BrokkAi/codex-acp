@@ -34,8 +34,10 @@ export class CodexApprovalHandler implements ApprovalHandler {
     constructor(
         private readonly connection: AcpClientConnection,
         private readonly permissionContext: PermissionPromptContext,
-        private readonly cancellationSignal?: AbortSignal,
+        private cancellationSignal?: AbortSignal,
     ) {}
+
+    setCancellationSignal(signal: AbortSignal): void { this.cancellationSignal = signal; }
 
     async handleCommandExecution(
         params: CommandExecutionRequestApprovalParams,

@@ -67,6 +67,7 @@ describe('CodexACPAgent - initialize', () => {
             },
             authMethods: getCodexAuthMethods(),
             _meta: {
+                execution: {version: 1},
                 steering: {
                     supported: true,
                 },
@@ -74,6 +75,7 @@ describe('CodexACPAgent - initialize', () => {
                     version: 1,
                     controlMethod: "_session/goal",
                     actions: ["set", "pause", "resume", "clear"],
+                    resumePolicies: ["preserve", "pause"],
                 },
                 jetbrains: {
                     air: {

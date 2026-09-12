@@ -140,7 +140,7 @@ export class CodexElicitationHandler implements ElicitationHandler {
     private readonly connection: AcpClientConnection;
     private readonly permissionContext: PermissionPromptContext;
     private readonly clientCapabilities: acp.ClientCapabilities | null;
-    private readonly cancellationSignal: AbortSignal | undefined;
+    private cancellationSignal: AbortSignal | undefined;
     // In Rust, the MCP elicitation handler receives ElicitationRequestEvent directly from the MCP
     // protocol layer, where id is set to "mcp_tool_call_approval_<call_id>" — the call ID is extracted
     // by stripping that prefix.
@@ -168,6 +168,8 @@ export class CodexElicitationHandler implements ElicitationHandler {
         this.clientCapabilities = clientCapabilities;
         this.cancellationSignal = cancellationSignal;
     }
+
+    setCancellationSignal(signal: AbortSignal): void { this.cancellationSignal = signal; }
 
     async handleNotification(notification: ServerNotification): Promise<void> {
         switch (notification.method) {

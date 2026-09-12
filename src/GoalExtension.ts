@@ -11,6 +11,7 @@ export type GoalCapability = {
     version: typeof GOAL_EXTENSION_VERSION;
     controlMethod: typeof GOAL_CONTROL_METHOD;
     actions: GoalControlAction[];
+    resumePolicies?: Array<"preserve" | "pause">;
 }
 
 export type GoalStatus = "active" | "paused" | "blocked" | "limited" | "complete";
@@ -30,4 +31,4 @@ export type GoalSnapshot = {
 
 export type GoalControlRequest =
     | { sessionId: SessionId; action: "set"; objective: string }
-    | { sessionId: SessionId; action: Exclude<GoalControlAction, "set"> }
+    | { sessionId: SessionId; action: Exclude<GoalControlAction, "set">; expectedGoal?: {objective: string; createdAt: number} }

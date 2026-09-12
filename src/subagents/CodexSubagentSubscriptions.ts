@@ -20,6 +20,7 @@ type Subscription = {
 type SessionSubscription = {
     current: Subscription;
     children: Set<string>;
+    activate?: (subscription: Subscription | null) => void;
 };
 
 /** Discovers child threads and keeps their output/interaction boundary negotiated. */
@@ -28,10 +29,52 @@ export class CodexSubagentSubscriptions {
 
     constructor(private readonly client: CodexAppServerClient) {}
 
+    /** Observe native resume before it can launch autonomous work. */
+    prepare(rootSessionId: string): void {
+        if (this.sessions.has(rootSessionId)) return;
+        const buffered: ServerNotification[] = [];
+        let activate!: (subscription: Subscription | null) => void;
+        const ready = new Promise<Subscription | null>(resolve => { activate = resolve; });
+        const current = async (): Promise<Subscription> => {
+            const subscription = await ready;
+            if (!subscription) throw new Error("Session closed while opening");
+            return subscription;
+        };
+        this.subscribe({
+            rootSessionId,
+            supportsSubagents: true,
+            dispatch: event => { buffered.push(event); },
+            enqueueInteraction: event => { buffered.push(event); },
+            approvalHandler: {
+                handleCommandExecution: async params => (await current()).approvalHandler.handleCommandExecution(params),
+                handleFileChange: async params => (await current()).approvalHandler.handleFileChange(params),
+                handlePermissionsRequest: async params => (await current()).approvalHandler.handlePermissionsRequest(params),
+            },
+            elicitationHandler: {
+                handleElicitation: async params => (await current()).elicitationHandler.handleElicitation(params),
+                handleUserInput: async params => (await current()).elicitationHandler.handleUserInput(params),
+            },
+            waitForRootNotifications: async () => (await current()).waitForRootNotifications(),
+            waitForChildSession: async id => (await current()).waitForChildSession(id),
+        });
+        this.sessions.get(rootSessionId)!.activate = subscription => {
+            activate(subscription);
+            if (subscription) for (const event of buffered) {
+                const threadId = (event.params as {threadId?: unknown}).threadId;
+                if (!subscription.supportsSubagents && typeof threadId === "string" && threadId !== rootSessionId) {
+                    subscription.enqueueInteraction(this.rootAttributed(event, rootSessionId));
+                } else subscription.dispatch(event);
+            }
+            buffered.length = 0;
+        };
+    }
+
     subscribe(subscription: Subscription): void {
         const existing = this.sessions.get(subscription.rootSessionId);
         if (existing) {
             existing.current = subscription;
+            existing.activate?.(subscription);
+            delete existing.activate;
             return;
         }
 
@@ -50,6 +93,7 @@ export class CodexSubagentSubscriptions {
         for (const childSessionId of this.sessions.get(rootSessionId)?.children ?? []) {
             this.client.clearThreadHandlers(childSessionId);
         }
+        this.sessions.get(rootSessionId)?.activate?.(null);
         this.sessions.delete(rootSessionId);
     }
 
@@ -86,8 +130,8 @@ export class CodexSubagentSubscriptions {
     private registerInteractiveHandlers(session: SessionSubscription, targetSessionId: string): void {
         this.client.onApprovalRequest(targetSessionId, {
             handleCommandExecution: async (params) => {
+                await session.current.waitForRootNotifications();
                 const current = session.current;
-                await current.waitForRootNotifications();
                 const sessionId = await this.interactionSessionId(current, targetSessionId);
                 if (sessionId === null) return {decision: "cancel"};
                 return await current.approvalHandler.handleCommandExecution(
@@ -95,8 +139,8 @@ export class CodexSubagentSubscriptions {
                 );
             },
             handleFileChange: async (params) => {
+                await session.current.waitForRootNotifications();
                 const current = session.current;
-                await current.waitForRootNotifications();
                 const sessionId = await this.interactionSessionId(current, targetSessionId);
                 if (sessionId === null) return {decision: "cancel"};
                 return await current.approvalHandler.handleFileChange(
@@ -104,8 +148,8 @@ export class CodexSubagentSubscriptions {
                 );
             },
             handlePermissionsRequest: async (params) => {
+                await session.current.waitForRootNotifications();
                 const current = session.current;
-                await current.waitForRootNotifications();
                 const sessionId = await this.interactionSessionId(current, targetSessionId);
                 if (sessionId === null) return {permissions: {}, scope: "turn", strictAutoReview: false};
                 return await current.approvalHandler.handlePermissionsRequest(
@@ -115,8 +159,8 @@ export class CodexSubagentSubscriptions {
         });
         this.client.onElicitationRequest(targetSessionId, {
             handleElicitation: async (params) => {
+                await session.current.waitForRootNotifications();
                 const current = session.current;
-                await current.waitForRootNotifications();
                 const sessionId = await this.interactionSessionId(current, targetSessionId);
                 if (sessionId === null) return {action: "cancel", content: null, _meta: null};
                 return await current.elicitationHandler.handleElicitation(
@@ -124,8 +168,8 @@ export class CodexSubagentSubscriptions {
                 );
             },
             handleUserInput: async (params) => {
+                await session.current.waitForRootNotifications();
                 const current = session.current;
-                await current.waitForRootNotifications();
                 const sessionId = await this.interactionSessionId(current, targetSessionId);
                 if (sessionId === null) return {answers: {}};
                 return await current.elicitationHandler.handleUserInput(

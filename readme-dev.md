@@ -84,3 +84,10 @@ npm run package:all
 1. Update the `@openai/codex` version in `package.json` (under `dependencies`).
 2. Regenerate Codex types in `src/app-server/`: `npm run generate-types`
 3. Ensure there are no type errors or failed tests: `npm run typecheck` and `npm run test`
+
+
+### Goal recovery and native execution
+
+Clients negotiate `_meta.execution: {version: 1}` in initialize capabilities to receive `_meta.execution` on session-info updates and session-open responses. The snapshot contains `version`, monotonic session `revision`, `status` (`running` or `idle`), and `turnId`. Session-open responses also include the current `_meta.goal` snapshot or explicit null. Native notifications and interaction handlers are installed before resume and remain active between ACP prompts.
+
+The goal capability advertises `resumePolicies`. A session resume/load request may include `_meta.goal.resumePolicy: "pause"` to pause an active stored goal before native opening. Omitting the policy, or using `"preserve"`, retains native continuation behavior. `_session/goal` pause/resume accepts `expectedGoal: {objective, createdAt}` using the published identity; stale decisions are rejected. Identity-checked resume acknowledges when execution starts and avoids starting a second already-running continuation. These controls preserve the goal budget and counters.

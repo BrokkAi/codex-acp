@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.3
+
+Observe autonomous Codex goal turns and interactions for the full ACP session lifetime, including fresh resumes. Publish goal/execution snapshots and turn transitions, and support pausing before explicit resume with identity-checked goal recovery that preserves accounting.
+
 ## 1.11.2
 
 Report token usage across all requests in an ACP prompt, with explicit scope metadata. Preserve incomplete coverage for unknown resumed baselines and counter resets. Context occupancy continues using the last request.
