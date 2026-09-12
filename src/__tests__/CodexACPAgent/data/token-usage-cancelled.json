@@ -1,11 +1,15 @@
 {
   "stopReason": "cancelled",
   "usage": {
-    "totalTokens": 1500,
-    "inputTokens": 1200,
+    "totalTokens": 3000,
+    "inputTokens": 2500,
+    "outputTokens": 500,
     "cachedReadTokens": 0,
-    "outputTokens": 300,
-    "thoughtTokens": 0
+    "cachedWriteTokens": 0,
+    "thoughtTokens": 0,
+    "_meta": {
+      "mjolnir.dev/usage-scope": "turn"
+    }
   },
   "_meta": {
     "quota": {

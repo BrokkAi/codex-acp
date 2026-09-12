@@ -478,6 +478,7 @@ export class CodexEventHandler {
                 return await this.createErrorEvent(notification.params);
             case "turn/started":
                 this.sessionState.currentTurnId = notification.params.turn.id;
+                this.sessionState.promptTokenUsage.beginTurn(notification.params.turn.id);
                 await this.flushPendingErrors();
                 return null;
             case "turn/completed":
@@ -1280,6 +1281,8 @@ export class CodexEventHandler {
     }
 
     private handleTokenUsageUpdated(params: ThreadTokenUsageUpdatedNotification): void {
+        if (params.threadId !== this.sessionState.sessionId) return;
+        this.sessionState.promptTokenUsage.observe(params.turnId, params.tokenUsage.total, params.tokenUsage.last);
         this.sessionState.lastTokenUsage = toTokenCount(params.tokenUsage.last);
         this.sessionState.totalTokenUsage = toTokenCount(params.tokenUsage.total);
         this.sessionState.modelContextWindow = params.tokenUsage.modelContextWindow;

@@ -53,7 +53,7 @@ import {
     REASONING_EFFORT_CONFIG_ID,
 } from "./ModelConfigOption";
 import type {TokenCount} from "./TokenCount";
-import {toPromptUsage} from "./TokenCount";
+import {PromptTokenUsage} from "./PromptTokenUsage";
 import {CodexCommands, GOAL_CONTINUATION_PROMPT} from "./CodexCommands";
 import {SteeringQueue} from "./SteeringQueue";
 import type {QuotaMeta} from "./QuotaMeta";
@@ -164,6 +164,7 @@ export interface SessionState {
     currentTurnId: string | null;
     lastTokenUsage: TokenCount | null;
     totalTokenUsage: TokenCount | null;
+    promptTokenUsage: PromptTokenUsage;
     modelContextWindow: number | null;
     rateLimits: RateLimitsMap | null;
     account: Account | null;
@@ -670,6 +671,7 @@ export class CodexAcpServer {
             currentTurnId: null,
             lastTokenUsage: null,
             totalTokenUsage: null,
+            promptTokenUsage: new PromptTokenUsage(operation === "new"),
             modelContextWindow: null,
             rateLimits: null,
             account: authState.account,
@@ -1927,6 +1929,7 @@ export class CodexAcpServer {
             currentTurnId: null,
             lastTokenUsage: null,
             totalTokenUsage: null,
+            promptTokenUsage: new PromptTokenUsage(false),
             modelContextWindow: null,
             rateLimits: null,
             account: authState.account,
@@ -2755,6 +2758,7 @@ export class CodexAcpServer {
         let recoverableSessionFailure = sessionState.sessionFailure;
         sessionState.currentTurnId = null;
         const activePrompt = this.trackActivePrompt(params.sessionId);
+        sessionState.promptTokenUsage.beginPrompt();
         let pendingTurnStart: PendingTurnStart | null = null;
         const ensurePendingTurnStart = (): PendingTurnStart => {
             if (pendingTurnStart === null) {
@@ -2851,6 +2855,7 @@ export class CodexAcpServer {
                         return;
                     }
                     sessionState.currentTurnId = turnId;
+                    sessionState.promptTokenUsage.beginTurn(turnId);
                     pendingTurnStart?.resolve(turnId);
                     onTurnStarted?.();
                 },
@@ -2913,7 +2918,7 @@ export class CodexAcpServer {
                 await clearRecoveredSessionFailure(eventHandler);
                 return {
                     stopReason: "end_turn",
-                    usage: this.buildPromptUsage(sessionState.lastTokenUsage),
+                    usage: sessionState.promptTokenUsage.report(),
                     _meta: this.buildQuotaMeta(sessionState),
                 };
             }
@@ -2965,6 +2970,7 @@ export class CodexAcpServer {
                             return;
                         }
                         sessionState.currentTurnId = turnId;
+                        sessionState.promptTokenUsage.beginTurn(turnId);
                         pendingTurnStart?.resolve(turnId);
                         onTurnStarted?.();
                     },
@@ -3065,6 +3071,7 @@ export class CodexAcpServer {
                                     return;
                                 }
                                 sessionState.currentTurnId = turnId;
+                                sessionState.promptTokenUsage.beginTurn(turnId);
                                 // Keep the approval-to-turn-start gap session-scoped. Once the new turn has
                                 // an identity, snapshot any unchanged session failure as its recovery baseline.
                                 recoverableSessionFailure = sessionState.sessionFailure;
@@ -3147,7 +3154,7 @@ export class CodexAcpServer {
 
             return {
                 stopReason: "end_turn",
-                usage: this.buildPromptUsage(sessionState.lastTokenUsage),
+                usage: sessionState.promptTokenUsage.report(),
                 _meta: this.buildQuotaMeta(sessionState),
             };
         } catch (err) {
@@ -3182,6 +3189,7 @@ export class CodexAcpServer {
             // The app-server subscription is session-scoped and outlives this prompt. Flip routing before
             // awaiting disposal so queued late notifications cannot enter prompt-local buffers.
             promptNotificationsActive = false;
+            sessionState.promptTokenUsage.endPrompt();
             try {
                 await this.codexAcpClient.waitForSessionNotifications(params.sessionId);
                 await eventHandler?.finishOutstandingNativeSubagents(
@@ -3248,7 +3256,7 @@ export class CodexAcpServer {
     private cancelledPromptResponse(sessionState: SessionState): acp.PromptResponse {
         return {
             stopReason: "cancelled",
-            usage: this.buildPromptUsage(sessionState.lastTokenUsage),
+            usage: sessionState.promptTokenUsage.report(),
             _meta: this.buildQuotaMeta(sessionState),
         };
     }
@@ -3265,7 +3273,7 @@ export class CodexAcpServer {
         }
         return {
             stopReason: "end_turn",
-            usage: this.buildPromptUsage(sessionState.lastTokenUsage),
+            usage: sessionState.promptTokenUsage.report(),
             _meta: {
                 ...this.buildQuotaMeta(sessionState),
                 ...failureMeta,
@@ -3290,13 +3298,6 @@ export class CodexAcpServer {
                 model_usage: modelUsage
             }
         };
-    }
-
-    private buildPromptUsage(lastTokenUsage: TokenCount | null): acp.Usage | null {
-        if (lastTokenUsage == null) {
-            return null;
-        }
-        return toPromptUsage(lastTokenUsage);
     }
 
     private async runWithProcessCheck<T>(operation: () => Promise<T>): Promise<T> {

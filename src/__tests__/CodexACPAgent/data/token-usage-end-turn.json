@@ -1,11 +1,15 @@
 {
   "stopReason": "end_turn",
   "usage": {
-    "totalTokens": 2500,
-    "inputTokens": 1500,
-    "cachedReadTokens": 500,
-    "outputTokens": 450,
-    "thoughtTokens": 50
+    "totalTokens": 5000,
+    "inputTokens": 4000,
+    "outputTokens": 900,
+    "cachedReadTokens": 1000,
+    "cachedWriteTokens": 0,
+    "thoughtTokens": 100,
+    "_meta": {
+      "mjolnir.dev/usage-scope": "turn"
+    }
   },
   "_meta": {
     "quota": {

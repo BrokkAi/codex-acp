@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2
+
+Report token usage across all requests in an ACP prompt, with explicit scope metadata. Preserve incomplete coverage for unknown resumed baselines and counter resets. Context occupancy continues using the last request.
+
 ## 1.11.1 (BrokkAi fork)
 
 - Preserve configured guardian sandbox grants across prompts and establish guardian/yolo approval policy at startup.

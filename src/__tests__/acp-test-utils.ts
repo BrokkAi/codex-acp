@@ -1,3 +1,4 @@
+import {PromptTokenUsage} from "../PromptTokenUsage";
 import * as acp from "@agentclientprotocol/sdk";
 import type {CreateElicitationResponse, McpServerStdio, RequestPermissionResponse} from "@agentclientprotocol/sdk";
 import {CodexAcpClient} from '../CodexAcpClient';
@@ -401,6 +402,7 @@ export function createTestSessionState(overrides?: Partial<SessionState>): Sessi
         currentTurnId: null,
         lastTokenUsage: null,
         totalTokenUsage: null,
+        promptTokenUsage: new PromptTokenUsage(true),
         modelContextWindow: null,
         rateLimits: null,
         account: null,

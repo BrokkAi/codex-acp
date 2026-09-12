@@ -1,3 +1,4 @@
+import {PromptTokenUsage} from "../../PromptTokenUsage";
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ServerNotification } from '../../app-server';
 import { createCodexMockTestFixture, createTestSessionState, type CodexMockTestFixture } from '../acp-test-utils';
@@ -30,7 +31,7 @@ describe('Token Usage Events', () => {
         vi.clearAllMocks();
     });
     describe('PromptResponse usage', () => {
-        function setupPromptWithTokenUsage(notifications: ServerNotification[], turnStatus: string = "completed") {
+        function setupPromptWithTokenUsage(notifications: ServerNotification[], turnStatus: string = "completed", state = createTestSessionState({sessionId})) {
             const codexAcpAgent = mockFixture.getCodexAcpAgent();
 
             mockFixture.getCodexAppServerClient().turnStart = vi.fn().mockResolvedValue({
@@ -49,10 +50,58 @@ describe('Token Usage Events', () => {
                 };
             });
 
-            vi.spyOn(codexAcpAgent, 'getSessionState').mockReturnValue(createTestSessionState({ sessionId }));
+            vi.spyOn(codexAcpAgent, 'getSessionState').mockReturnValue(state);
 
             return codexAcpAgent;
         }
+
+        function usage(total: number, last: number = total): ServerNotification {
+            const counters = (n: number): TokenUsageBreakdown => ({totalTokens: n, inputTokens: n * 0.8, cachedInputTokens: n * 0.2, cacheWriteInputTokens: 0, outputTokens: n * 0.2, reasoningOutputTokens: 0});
+            return createTokenUsageNotification(sessionId, {total: counters(total), last: counters(last), modelContextWindow: 10000});
+        }
+
+        it('counts each request once and keeps the baseline across prompts', async () => {
+            const notifications = [usage(100), usage(100), usage(300, 200)];
+            const agent = setupPromptWithTokenUsage(notifications);
+            const first = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'first'}]});
+            expect(first.usage).toMatchObject({totalTokens: 300, inputTokens: 240, cachedReadTokens: 60, _meta: {'mjolnir.dev/usage-scope': 'turn'}});
+            notifications.splice(0, notifications.length, usage(500, 200));
+            const second = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'second'}]});
+            expect(second.usage).toMatchObject({totalTokens: 200, _meta: {'mjolnir.dev/usage-scope': 'turn'}});
+        });
+
+        it('does not label an unknown resumed baseline as a complete turn', async () => {
+            const agent = setupPromptWithTokenUsage([usage(1000, 100), usage(1200, 200)], 'completed', createTestSessionState({sessionId, promptTokenUsage: new PromptTokenUsage(false)}));
+            const response = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'resume'}]});
+            expect(response.usage).toMatchObject({totalTokens: 300, _meta: {'mjolnir.dev/usage-scope': 'unspecified'}});
+        });
+
+        it('marks counter resets incomplete and never adds a negative delta', async () => {
+            const agent = setupPromptWithTokenUsage([usage(200), usage(100), usage(300, 200)]);
+            const response = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'compact'}]});
+            expect(response.usage).toMatchObject({totalTokens: 400, _meta: {'mjolnir.dev/usage-scope': 'unspecified'}});
+        });
+
+        it('keeps reported zero distinct from no report', async () => {
+            const notifications = [usage(0)];
+            const agent = setupPromptWithTokenUsage(notifications);
+            const first = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'zero'}]});
+            expect(first.usage?.totalTokens).toBe(0);
+            notifications.length = 0;
+            const second = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'missing'}]});
+            expect(second.usage).toBeNull();
+            notifications.push(usage(200, 100));
+            const third = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'after missing'}]});
+            expect(third.usage?._meta?.['mjolnir.dev/usage-scope']).toBe('unspecified');
+        });
+
+        it('excludes unrelated turn consumption', async () => {
+            const unrelated = usage(400, 300);
+            if (unrelated.method === 'thread/tokenUsage/updated') unrelated.params.turnId = 'other-turn';
+            const agent = setupPromptWithTokenUsage([usage(100), unrelated, usage(600, 200)]);
+            const response = await agent.prompt({sessionId, prompt: [{type: 'text', text: 'scoped'}]});
+            expect(response.usage).toMatchObject({totalTokens: 300, _meta: {'mjolnir.dev/usage-scope': 'unspecified'}});
+        });
 
         it('should include token_count in PromptResponse on end_turn', async () => {
             const tokenUsageNotification = createTokenUsageNotification(sessionId, {
@@ -133,7 +182,7 @@ describe('Token Usage Events', () => {
             );
         });
 
-        it('should use last token usage from multiple updates', async () => {
+        it('should sum complete prompt usage from multiple updates', async () => {
             const notifications: ServerNotification[] = [
                 createTokenUsageNotification(sessionId, {
                     total: { totalTokens: 1000, inputTokens: 800, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 200, reasoningOutputTokens: 0 },
