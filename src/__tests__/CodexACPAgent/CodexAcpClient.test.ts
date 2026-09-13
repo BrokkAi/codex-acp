@@ -552,12 +552,14 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             sessionId: "resume-id",
             cwd: "/workspace",
             additionalDirectories: ["/workspace/resume-extra"],
+            _meta: {codex: {options: {disallowedTools: ["spawn_agent"]}}},
         });
         const loaded = await codexAcpClient.loadSession({
             sessionId: "load-id",
             cwd: "/workspace",
             additionalDirectories: ["/workspace/load-extra"],
             mcpServers: [],
+            _meta: {codex: {options: {disallowedTools: ["wait_agent"]}}},
         });
 
         expect(threadResumeSpy.mock.calls.every(([params]) => params.excludeTurns === true)).toBe(true);
@@ -571,6 +573,18 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             "/workspace": {trust_level: "trusted"},
             "/workspace/load-extra": {trust_level: "trusted"},
         });
+        expect(threadResumeSpy.mock.calls[0]![0].config?.["features"]).toEqual({
+            multi_agent: false,
+            multi_agent_v2: false,
+        });
+        expect(threadResumeSpy.mock.calls[0]![0].config?.["agents"]).toEqual({enabled: false});
+        expect(threadResumeSpy.mock.calls[1]![0].config?.["agents"]).toEqual({enabled: false});
+        expect(threadResumeSpy.mock.calls[1]![0].config?.["features"]).toEqual({
+            multi_agent: false,
+            multi_agent_v2: false,
+        });
+        expect(resumed.disallowedTools).toEqual(["spawn_agent"]);
+        expect(loaded.disallowedTools).toEqual(["wait_agent"]);
         expect(threadReadSpy).toHaveBeenCalledWith("thread-id");
     });
 
@@ -602,6 +616,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             cwd: "/workspace",
             additionalDirectories: ["/workspace/extra"],
             mcpServers: [],
+            _meta: {codex: {options: {disallowedTools: ["spawn_agent"]}}},
         });
 
         expect(forked.sessionId).toBe("fork-id");
@@ -615,8 +630,14 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     "/workspace": {trust_level: "trusted"},
                     "/workspace/extra": {trust_level: "trusted"},
                 },
+                features: {
+                    multi_agent: false,
+                    multi_agent_v2: false,
+                },
+                agents: {enabled: false},
             }),
         }));
+        expect(forked.disallowedTools).toEqual(["spawn_agent"]);
         expect(threadUnsubscribeSpy).toHaveBeenCalledWith({threadId: "fork-id"});
     });
 

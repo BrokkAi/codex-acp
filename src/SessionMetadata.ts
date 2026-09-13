@@ -10,6 +10,7 @@ export type SessionMetadata = {
     modelProvider?: string | null,
     currentServiceTier?: ServiceTier | null,
     additionalDirectories: string[],
+    disallowedTools?: string[],
 }
 
 export type SessionMetadataWithThread = SessionMetadata & {

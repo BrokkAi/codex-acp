@@ -211,7 +211,11 @@ describe("Configurable LLM providers (providers/*)", () => {
         const agent = fixture.getCodexAcpAgent();
         await agent.initialize({protocolVersion: acp.PROTOCOL_VERSION});
         const sessions = (agent as unknown as {sessions: Map<string, ReturnType<typeof createTestSessionState>>}).sessions;
-        const firstSession = createTestSessionState({sessionId: "thread-1", cwd: "/one"});
+        const firstSession = createTestSessionState({
+            sessionId: "thread-1",
+            cwd: "/one",
+            disallowedTools: ["spawn_agent"],
+        });
         const secondSession = createTestSessionState({sessionId: "thread-2", cwd: "/two"});
         const firstSessionPrepare = vi.spyOn(firstSession.asyncTasks, "prepareForAppServerReplacement");
         const secondSessionPrepare = vi.spyOn(secondSession.asyncTasks, "prepareForAppServerReplacement");
@@ -234,8 +238,17 @@ describe("Configurable LLM providers (providers/*)", () => {
         expect(secondSessionPrepare).toHaveBeenCalledOnce();
         expect(firstSessionSetAppServer).toHaveBeenCalledWith(firstGatewayReplacement.appServerClient);
         expect(secondSessionSetAppServer).toHaveBeenCalledWith(firstGatewayReplacement.appServerClient);
-        expect(firstGatewayResume).toHaveBeenCalledWith(expect.objectContaining({sessionId: "thread-1", cwd: "/one"}));
-        expect(firstGatewayResume).toHaveBeenCalledWith(expect.objectContaining({sessionId: "thread-2", cwd: "/two"}));
+        expect(firstGatewayResume).toHaveBeenCalledWith(expect.objectContaining({
+            sessionId: "thread-1",
+            cwd: "/one",
+            _meta: {codex: {options: {disallowedTools: ["spawn_agent"]}}},
+        }));
+        expect(firstGatewayResume).toHaveBeenCalledWith({
+            sessionId: "thread-2",
+            cwd: "/two",
+            additionalDirectories: [],
+            mcpServers: [],
+        });
 
         await agent.setProvider({
             providerId: OPENAI_PROVIDER_ID,

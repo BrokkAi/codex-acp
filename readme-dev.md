@@ -91,3 +91,23 @@ npm run package:all
 Clients negotiate `_meta.execution: {version: 1}` in initialize capabilities to receive `_meta.execution` on session-info updates and session-open responses. The snapshot contains `version`, monotonic session `revision`, `status` (`running` or `idle`), and `turnId`. Session-open responses also include the current `_meta.goal` snapshot or explicit null. Native notifications and interaction handlers are installed before resume and remain active between ACP prompts.
 
 The goal capability advertises `resumePolicies`. A session resume/load request may include `_meta.goal.resumePolicy: "pause"` to pause an active stored goal before native opening. Omitting the policy, or using `"preserve"`, retains native continuation behavior. `_session/goal` pause/resume accepts `expectedGoal: {objective, createdAt}` using the published identity; stale decisions are rejected. Identity-checked resume acknowledges when execution starts and avoids starting a second already-running continuation. These controls preserve the goal budget and counters.
+
+### Disallowed native tools
+
+Session creation, resume, load, and fork requests accept the private option `_meta.codex.options.disallowedTools`, modeled after Claude Code's option of the same name. Codex currently exposes native collaboration tools as one feature family, so listing any supported collaboration tool removes the entire family from the model before inference. Supported names are `spawn_agent`, `send_input`, `send_message`, `followup_task`, `resume_agent`, `wait_agent`, `list_agents`, `close_agent`, and `interrupt_agent`. Other names are rejected because Codex does not yet provide a generic native-tool deny list and silently accepting them would not enforce the requested policy.
+
+For example:
+
+```json
+{
+  "_meta": {
+    "codex": {
+      "options": {
+        "disallowedTools": ["spawn_agent"]
+      }
+    }
+  }
+}
+```
+
+The live development runner accepts the equivalent repeatable flag: `npm run codex-test -- -p "Delegate this task" --disallow-tool spawn_agent`.

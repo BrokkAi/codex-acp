@@ -70,6 +70,7 @@ import {
 import {CodexSubagentSubscriptions} from "./subagents/CodexSubagentSubscriptions";
 import {forkSession as runForkSession} from "./SessionFork";
 import type {SessionMetadata, SessionMetadataWithThread} from "./SessionMetadata";
+import {applyDisallowedTools, readDisallowedTools} from "./DisallowedTools";
 export type {SessionMetadata, SessionMetadataWithThread} from "./SessionMetadata";
 
 /**
@@ -529,6 +530,7 @@ export class CodexAcpClient {
 
     async resumeSession(request: acp.ResumeSessionRequest, onSubscribed?: () => void): Promise<SessionMetadata> {
         const additionalDirectories = readAdditionalDirectories(request.cwd, request.additionalDirectories, request._meta);
+        const disallowedTools = readDisallowedTools(request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
         const goalPolicy = request._meta?.["goal"] as {resumePolicy?: string} | undefined;
@@ -544,7 +546,7 @@ export class CodexAcpClient {
         onSubscribed?.();
         const response = await this.codexClient.threadResume({
             excludeTurns: true,
-            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? []),
+            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? [], disallowedTools),
             cwd: request.cwd,
             modelProvider: await this.getResumeModelProvider(),
             threadId: request.sessionId,
@@ -559,16 +561,18 @@ export class CodexAcpClient {
             modelProvider: response.modelProvider,
             currentServiceTier: response.serviceTier as ServiceTier ?? null,
             additionalDirectories,
+            disallowedTools,
         }
     }
 
     async forkSession(request: acp.ForkSessionRequest): Promise<SessionMetadata> {
         const additionalDirectories = readAdditionalDirectories(request.cwd, request.additionalDirectories, request._meta);
-        return await runForkSession(request, additionalDirectories, {
+        const disallowedTools = readDisallowedTools(request._meta);
+        return await runForkSession(request, additionalDirectories, disallowedTools, {
             codexClient: this.codexClient,
             refreshSkills: (cwd, directories) => this.refreshSkills(cwd, directories),
-            createSessionConfig: (cwd, directories, mcpServers) =>
-                this.createSessionConfig(cwd, directories, mcpServers),
+            createSessionConfig: (cwd, directories, mcpServers, tools) =>
+                this.createSessionConfig(cwd, directories, mcpServers, tools),
             getResumeModelProvider: () => this.getResumeModelProvider(),
             fetchAvailableModels: () => this.fetchAvailableModels(),
             createCurrentModelId: (models, model, reasoningEffort) =>
@@ -579,6 +583,7 @@ export class CodexAcpClient {
 
     async loadSession(request: acp.LoadSessionRequest, onSubscribed?: () => void): Promise<SessionMetadataWithThread> {
         const additionalDirectories = readAdditionalDirectories(request.cwd, request.additionalDirectories, request._meta);
+        const disallowedTools = readDisallowedTools(request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
         const goalPolicy = request._meta?.["goal"] as {resumePolicy?: string} | undefined;
@@ -594,7 +599,7 @@ export class CodexAcpClient {
         onSubscribed?.();
         const response = await this.codexClient.threadResume({
             excludeTurns: true,
-            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? []),
+            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? [], disallowedTools),
             cwd: request.cwd,
             modelProvider: await this.getResumeModelProvider(),
             threadId: request.sessionId,
@@ -620,6 +625,7 @@ export class CodexAcpClient {
             currentServiceTier: response.serviceTier as ServiceTier ?? null,
             thread,
             additionalDirectories,
+            disallowedTools,
         };
     }
 
@@ -629,6 +635,7 @@ export class CodexAcpClient {
 
     async newSession(request: acp.NewSessionRequest): Promise<SessionMetadata> {
         const additionalDirectories = readAdditionalDirectories(request.cwd, request.additionalDirectories, request._meta);
+        const disallowedTools = readDisallowedTools(request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
         const response = await this.codexClient.threadStart({
@@ -636,7 +643,7 @@ export class CodexAcpClient {
             // Named profiles use them without flattening their filesystem rules.
             ...(additionalDirectories.length > 0
                 ? {runtimeWorkspaceRoots: [request.cwd, ...additionalDirectories]} : {}),
-            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers),
+            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers, disallowedTools),
             modelProvider: this.getModelProvider(),
             cwd: request.cwd,
         });
@@ -654,6 +661,7 @@ export class CodexAcpClient {
             modelProvider: response.modelProvider,
             currentServiceTier: response.serviceTier as ServiceTier ?? null,
             additionalDirectories,
+            disallowedTools,
         };
     }
 
@@ -756,7 +764,8 @@ export class CodexAcpClient {
     private async createSessionConfig(
         projectPath: string,
         additionalDirectories: string[],
-        mcpServers: Array<McpServer>
+        mcpServers: Array<McpServer>,
+        disallowedTools: string[],
     ): Promise<JsonObject> {
         const sessionRoots = [projectPath, ...additionalDirectories];
         const activeProvider = this.gatewayConfig
@@ -815,8 +824,9 @@ export class CodexAcpClient {
             } : modeConfig,
             additionalDirectories,
         );
+        const configWithToolPolicy = applyDisallowedTools(configWithWorkspaceRoots, disallowedTools);
         if (mcpServers.length === 0) {
-            return configWithWorkspaceRoots;
+            return configWithToolPolicy;
         }
 
         const requestedServers = mcpServers.map(mcp => ({
@@ -830,11 +840,11 @@ export class CodexAcpClient {
             serversToConfigure = requestedServers.filter(mcp => !existingNames.has(mcp.name));
         }
         if (serversToConfigure.length === 0) {
-            return configWithWorkspaceRoots;
+            return configWithToolPolicy;
         }
 
         return {
-            ...configWithWorkspaceRoots,
+            ...configWithToolPolicy,
             "mcp_servers": Object.fromEntries(serversToConfigure.map(mcp => [mcp.name, this.createMcpSeverConfig(mcp.server)])),
         };
     }

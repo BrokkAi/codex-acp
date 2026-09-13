@@ -14,6 +14,7 @@ export type SessionForkDependencies = {
         cwd: string,
         additionalDirectories: string[],
         mcpServers: acp.McpServer[],
+        disallowedTools: string[],
     ): Promise<NonNullable<ThreadForkParams["config"]>>;
     getResumeModelProvider(): Promise<string>;
     fetchAvailableModels(): Promise<Model[]>;
@@ -24,6 +25,7 @@ export type SessionForkDependencies = {
 export async function forkSession(
     request: acp.ForkSessionRequest,
     additionalDirectories: string[],
+    disallowedTools: string[],
     dependencies: SessionForkDependencies,
 ): Promise<SessionMetadata> {
     await dependencies.refreshSkills(request.cwd, additionalDirectories);
@@ -34,6 +36,7 @@ export async function forkSession(
             request.cwd,
             additionalDirectories,
             request.mcpServers ?? [],
+            disallowedTools,
         ),
         cwd: request.cwd,
         ...(lastTurnId !== undefined && {lastTurnId}),
@@ -51,6 +54,7 @@ export async function forkSession(
         modelProvider: response.modelProvider,
         currentServiceTier: response.serviceTier as ServiceTier ?? null,
         additionalDirectories,
+        disallowedTools,
     };
 }
 

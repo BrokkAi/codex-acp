@@ -6,6 +6,7 @@
  *   npm run codex-test -- --prompt "Your prompt here"
  *   npm run codex-test -- -p "Hello" -c /path/to/project
  *   npm run codex-test -- -p "Hello" -o codex --json
+ *   npm run codex-test -- -p "Delegate this" --disallow-tool spawn_agent
  */
 
 import path from "node:path";
@@ -17,12 +18,13 @@ import {CodexAcpServer} from "../../../../src/CodexAcpServer";
 import type {AgentSideConnection} from "@agentclientprotocol/sdk";
 
 // Parse command line arguments
-function parseArgs(): { prompt: string; cwd: string; output: string; json: boolean } {
+function parseArgs(): { prompt: string; cwd: string; output: string; json: boolean; disallowedTools: string[] } {
     const args = process.argv.slice(2);
     let prompt = "";
     let cwd = process.cwd();
     let output = "all";
     let json = false;
+    const disallowedTools: string[] = [];
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -34,6 +36,13 @@ function parseArgs(): { prompt: string; cwd: string; output: string; json: boole
             output = args[++i] || "all";
         } else if (arg === "--json") {
             json = true;
+        } else if (arg === "--disallow-tool") {
+            const tool = args[++i];
+            if (!tool) {
+                console.error("Error: --disallow-tool requires a tool name");
+                process.exit(1);
+            }
+            disallowedTools.push(tool);
         } else if (arg === "--help" || arg === "-h") {
             console.log(`
 Usage: npm run codex-test -- [options]
@@ -43,12 +52,14 @@ Options:
   -c, --cwd <path>      Working directory for the session (default: current dir)
   -o, --output <type>   Output type: all, codex, acp, summary (default: all)
   --json                Output events as JSON
+  --disallow-tool <name> Disallow a native Codex tool (repeatable)
   -h, --help            Show this help message
 
 Examples:
   npm run codex-test -- -p "What files are here?"
   npm run codex-test -- -p "Read README" -c /path/to/project
   npm run codex-test -- -p "Hello" -o codex --json
+  npm run codex-test -- -p "Delegate this" --disallow-tool spawn_agent
 `);
             process.exit(0);
         }
@@ -59,7 +70,7 @@ Examples:
         process.exit(1);
     }
 
-    return { prompt, cwd, output, json };
+    return { prompt, cwd, output, json, disallowedTools };
 }
 
 type MethodCallEvent = { method: string; args: unknown[] };
@@ -76,7 +87,7 @@ function createMockAcpConnection(events: MethodCallEvent[]): AgentSideConnection
 }
 
 async function main() {
-    const { prompt, cwd, output, json } = parseArgs();
+    const { prompt, cwd, output, json, disallowedTools } = parseArgs();
 
     // Find Codex binary
     const pathToCodex = path.resolve(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "codex.cmd" : "codex");
@@ -91,6 +102,7 @@ async function main() {
     console.log(`Prompt: ${prompt}`);
     console.log(`CWD: ${cwd}`);
     console.log(`Output: ${output}`);
+    console.log(`Disallowed tools: ${disallowedTools.join(", ") || "none"}`);
     console.log("=".repeat(60));
     console.log("");
 
@@ -145,7 +157,13 @@ async function main() {
 
         // Create session
         console.log("\n--- Creating Session ---\n");
-        const sessionResponse = await codexAcpAgent.newSession({ cwd, mcpServers: [] });
+        const sessionResponse = await codexAcpAgent.newSession({
+            cwd,
+            mcpServers: [],
+            _meta: disallowedTools.length > 0
+                ? {codex: {options: {disallowedTools}}}
+                : undefined,
+        });
         console.log(`Session ID: ${sessionResponse.sessionId}`);
         console.log(`Model: ${sessionResponse.models?.currentModelId}`);
 
@@ -181,12 +199,31 @@ async function main() {
             // Event type breakdown
             const eventTypes = new Map<string, number>();
             for (const event of codexEvents) {
-                const key = `${event.type}:${(event.data as any)?.method || "unknown"}`;
+                const key = `${event.eventType}:${"method" in event ? event.method : "unknown"}`;
                 eventTypes.set(key, (eventTypes.get(key) || 0) + 1);
             }
             console.log(`\nEvent Types:`);
             for (const [type, count] of eventTypes) {
                 console.log(`  ${type}: ${count}`);
+            }
+
+            const completedItems = codexEvents.flatMap(event =>
+                event.eventType === "notification"
+                && event.method === "item/completed"
+                && (event.params as any)?.item
+                    ? [(event.params as any).item]
+                    : []
+            );
+            const itemTypes = new Map<string, number>();
+            for (const item of completedItems) {
+                itemTypes.set(item.type, (itemTypes.get(item.type) || 0) + 1);
+            }
+            console.log(`\nCompleted Item Types:`);
+            for (const [type, count] of itemTypes) {
+                console.log(`  ${type}: ${count}`);
+            }
+            for (const item of completedItems.filter(item => item.type === "agentMessage")) {
+                console.log(`\nAgent Message: ${item.text}`);
             }
         }
 

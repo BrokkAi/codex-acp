@@ -151,6 +151,7 @@ import {
     createUnavailableAgentFileChangeReport,
     parseAgentFileChangeReportRequest,
 } from "./AgentFileChangeReport";
+import {createDisallowedToolsMeta} from "./DisallowedTools";
 
 
 export interface SessionState {
@@ -172,6 +173,7 @@ export interface SessionState {
     authProvider: string | null;
     cwd: string;
     additionalDirectories: string[];
+    disallowedTools?: string[];
     mcpServers?: Array<acp.McpServer>;
     fastModeEnabled: boolean;
     currentModelSupportsFast: boolean;
@@ -714,6 +716,7 @@ export class CodexAcpServer {
             authProvider: authProvider,
             cwd: request.cwd,
             additionalDirectories: sessionMetadata.additionalDirectories,
+            disallowedTools: sessionMetadata.disallowedTools ?? [],
             mcpServers: requestedMcpServers,
             fastModeEnabled: sessionMetadata.currentServiceTier === "fast",
             currentModelSupportsFast: currentModelSupportsFast,
@@ -1160,11 +1163,13 @@ export class CodexAcpServer {
             for (const session of this.sessions.values()) {
                 session.asyncTasks.setAppServer(replacement.appServerClient);
                 try {
+                    const disallowedToolsMeta = createDisallowedToolsMeta(session.disallowedTools ?? []);
                     await replacement.resumeSession({
                         sessionId: session.sessionId,
                         cwd: session.cwd,
                         additionalDirectories: session.additionalDirectories,
                         mcpServers: session.mcpServers ?? [],
+                        ...(disallowedToolsMeta !== undefined && {_meta: disallowedToolsMeta}),
                     });
                     session.authProvider = replacement.getModelProvider();
                     session.asyncTasks.refresh();
@@ -2072,6 +2077,7 @@ export class CodexAcpServer {
             authProvider: authProvider,
             cwd: request.cwd,
             additionalDirectories: sessionMetadata.additionalDirectories,
+            disallowedTools: sessionMetadata.disallowedTools ?? [],
             mcpServers: requestedMcpServers,
             fastModeEnabled: sessionMetadata.currentServiceTier === "fast",
             currentModelSupportsFast: currentModelSupportsFast,
