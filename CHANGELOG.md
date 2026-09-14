@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.4
+
+Allow ACP clients to suppress Codex's native collaboration tools with the Claude-compatible `_meta.codex.options.disallowedTools` session option. The policy survives new, resumed, loaded, forked, and provider-restarted sessions so clients can substitute their own sub-agent implementation reliably.
+
 ## 1.11.3
 
 Observe autonomous Codex goal turns and interactions for the full ACP session lifetime, including fresh resumes. Publish goal/execution snapshots and turn transitions, and support pausing before explicit resume with identity-checked goal recovery that preserves accounting.
