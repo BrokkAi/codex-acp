@@ -111,3 +111,15 @@ For example:
 ```
 
 The live development runner accepts the equivalent repeatable flag: `npm run codex-test -- -p "Delegate this task" --disallow-tool spawn_agent`.
+
+### Native child cancellation
+
+Clients that negotiate `nativeSubagentSessions` receive `capabilities.cancel: true`
+for live children. Send `_session/subagent/cancel` as a JSON-RPC request with
+`{sessionId: <owner>, subagentSessionId: <child>}`. The reply is
+`{cancelled: true}` after Codex accepts interruption of that child's active turn;
+terminal state still arrives through `subagent_state_update`. Unknown children,
+terminal children, and stale generation IDs return `{cancelled: false}`. Errors
+from Codex propagate to the caller. Parent and sibling turns are unaffected.
+Replayed children remain read-only; continuing a child publishes a new generation
+with live capabilities. Closing and direct prompting are not advertised.
