@@ -48,3 +48,10 @@ export function clientSupportsSubagents(
 
     return clientSupportsAirCapability(capabilities, AIR_NATIVE_SUBAGENT_SESSIONS_KEY);
 }
+
+/** Acknowledged cancellation of an owned native child, without cancelling its parent. */
+export const SUBAGENT_CANCEL_METHOD = "_session/subagent/cancel";
+export type SubagentCancelExtRequest = {
+    method: typeof SUBAGENT_CANCEL_METHOD;
+    params: {sessionId: string; subagentSessionId: string};
+};

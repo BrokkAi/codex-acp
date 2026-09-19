@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {SUBAGENT_CANCEL_METHOD} from "./subagents/AcpSubagents";
 
 import * as acp from "@agentclientprotocol/sdk";
 import {z} from "zod";
@@ -44,6 +45,11 @@ const goalControlParamsParser = z.discriminatedUnion("action", [
         action: z.enum(["pause", "resume", "clear"]),
     }).passthrough(),
 ]);
+
+const subagentCancelParamsParser = z.object({
+    sessionId: z.string().trim().min(1),
+    subagentSessionId: z.string().min(1),
+}).passthrough();
 
 const asyncTaskStopParamsParser = z.object({
     sessionId: z.string().trim().min(1),
@@ -167,6 +173,7 @@ function startAcpServer() {
         .onRequest("authentication/logout", emptyExtensionParamsParser, (ctx) => getAgent().extMethod("authentication/logout", ctx.params))
         .onRequest(LEGACY_SET_SESSION_MODEL_METHOD, legacySetSessionModelParamsParser, (ctx) => getAgent().extMethod(LEGACY_SET_SESSION_MODEL_METHOD, ctx.params))
         .onRequest(SESSION_STEERING_METHOD, sessionSteerParamsParser, (ctx) => getAgent().extMethod(SESSION_STEERING_METHOD, ctx.params))
+        .onRequest(SUBAGENT_CANCEL_METHOD, subagentCancelParamsParser, (ctx) => getAgent().extMethod(SUBAGENT_CANCEL_METHOD, ctx.params))
         .onRequest(ASYNC_TASK_STOP_METHOD, asyncTaskStopParamsParser, (ctx) => getAgent().extMethod(ASYNC_TASK_STOP_METHOD, ctx.params))
         .onRequest(GOAL_CONTROL_METHOD, goalControlParamsParser, (ctx) => getAgent().extMethod(GOAL_CONTROL_METHOD, ctx.params))
         .connect(acpJsonStream);

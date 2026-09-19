@@ -1,3 +1,4 @@
+import {SUBAGENT_CANCEL_METHOD, type SubagentState} from "./subagents/AcpSubagents";
 import * as acp from "@agentclientprotocol/sdk";
 import {RequestError, type SessionId, type SessionModeState} from "@agentclientprotocol/sdk";
 import {CodexEventHandler, type CompletedPlan} from "./CodexEventHandler";
@@ -434,6 +435,15 @@ export class CodexAcpServer {
                 return await this.unstable_setSessionModel(this.parseLegacySetSessionModelParams(methodRequest.params));
             case SESSION_STEERING_METHOD:
                 return await this.executeOrQueueSteeringRequest(this.parseSessionSteerParams(methodRequest.params));
+            case SUBAGENT_CANCEL_METHOD: {
+                if (this.providerUpdate !== null) await this.providerUpdate;
+                const sessionState = this.sessions.get(methodRequest.params.sessionId);
+                if (!sessionState) return {cancelled: false};
+                return {cancelled: await this.runWithProcessCheck(() => sessionState.subagents.cancel(
+                    methodRequest.params.subagentSessionId,
+                    (threadId, turnId) => this.codexAcpClient.turnInterrupt({threadId, turnId}),
+                ))};
+            }
             case ASYNC_TASK_STOP_METHOD: {
                 if (this.providerUpdate !== null) {
                     await this.providerUpdate;
@@ -2168,7 +2178,7 @@ export class CodexAcpServer {
         threadCache: Map<string, Thread | null>,
     ): Promise<void> {
         const session = new ACPSessionConnection(this.connection, sessionId);
-        const announced = new Map<string, {generation: number; sessionId: string; terminal: boolean}>();
+        const announced = new Map<string, {generation: number; sessionId: string; terminal: boolean; name: string; state?: SubagentState}>();
         for (const turn of thread.turns) {
             for (const item of turn.items) {
                 if (item.type === "subAgentActivity") {
@@ -2188,7 +2198,7 @@ export class CodexAcpServer {
                             task: `Delegated task for ${name}`,
                             capabilities: {},
                         });
-                        announced.set(item.agentThreadId, {generation, sessionId: childSessionId, terminal: false});
+                        announced.set(item.agentThreadId, {generation, sessionId: childSessionId, terminal: false, name});
                         if (!ancestry.has(item.agentThreadId)) {
                             let child = threadCache.get(item.agentThreadId);
                             if (child === undefined) {
@@ -2238,6 +2248,7 @@ export class CodexAcpServer {
                                 generation: 1,
                                 sessionId: item.agentThreadId,
                                 terminal: false,
+                                name,
                             });
                             continue;
                         }
@@ -2248,6 +2259,7 @@ export class CodexAcpServer {
                             state: activityKind === "completed" ? "completed" : "cancelled",
                         });
                         child.terminal = true;
+                        child.state = activityKind === "completed" ? "completed" : "cancelled";
                     }
                     continue;
                 }
@@ -2257,12 +2269,22 @@ export class CodexAcpServer {
                 }
             }
         }
-        for (const child of announced.values()) {
-            if (child.terminal) continue;
-            await session.update({
-                sessionUpdate: "subagent_state_update",
-                subagentSessionId: child.sessionId,
-                state: "disconnected",
+        for (const [threadId, child] of announced) {
+            if (!child.terminal) {
+                await session.update({
+                    sessionUpdate: "subagent_state_update",
+                    subagentSessionId: child.sessionId,
+                    state: "disconnected",
+                });
+            }
+            sessionState.subagents.restoreHistoryChild(threadId, {
+                parentThreadId: thread.id,
+                parentSessionId: sessionId,
+                sessionId: child.sessionId,
+                name: child.name,
+                task: `Delegated task for ${child.name}`,
+                generation: child.generation,
+                terminalState: child.state ?? "disconnected",
             });
         }
     }

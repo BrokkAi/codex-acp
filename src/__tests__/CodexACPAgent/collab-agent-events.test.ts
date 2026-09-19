@@ -364,7 +364,7 @@ describe("CodexEventHandler - collab agent tool call events", () => {
                     subagentSessionId: "child-1",
                     name: "Air architecture",
                     task: "Delegated task for Air architecture",
-                    capabilities: {},
+                    capabilities: {cancel: true},
                 },
             },
             {
@@ -374,7 +374,7 @@ describe("CodexEventHandler - collab agent tool call events", () => {
                     subagentSessionId: "grandchild-1",
                     name: "Tests",
                     task: "Delegated task for Tests",
-                    capabilities: {},
+                    capabilities: {cancel: true},
                 },
             },
             {
@@ -543,7 +543,7 @@ describe("CodexEventHandler - collab agent tool call events", () => {
                     subagentSessionId: "thread-paris",
                     name: "Weather research",
                     task: "Find the current weather in Paris.",
-                    capabilities: {},
+                    capabilities: {cancel: true},
                 },
             },
             {
@@ -1638,4 +1638,51 @@ describe("CodexEventHandler - collab agent tool call events", () => {
                 && event.args[0].update.sessionUpdate === "subagent_state_update");
         expect(terminal).toHaveLength(1);
     });
+    it("cancels only the owned current child generation and preserves lifecycle failures", async () => {
+        const router = new CodexSubagentEventRouter(sessionId, true,
+            new ACPSessionConnection(mockFixture.getAcpConnection(), sessionId));
+        const announce = (child: string): ServerNotification => ({method: "item/started", params: {
+            threadId: sessionId, turnId: "root-turn", startedAtMs: 0,
+            item: {type: "subAgentActivity", id: `activity-${child}`, kind: "started", agentThreadId: child, agentPath: `/root/${child}`},
+        }});
+        const turn = (method: "turn/started" | "turn/completed", threadId: string, id: string, status: "inProgress" | "completed"): ServerNotification => ({method, params: {
+            threadId, turn: {id, items: [], itemsView: "notLoaded", status, error: null, startedAt: null, completedAt: null, durationMs: null},
+        }});
+        await router.handle(announce("child-a"));
+        await router.handle(announce("child-b"));
+        await router.handle(turn("turn/started", "child-a", "a-1", "inProgress"));
+        await router.handle(turn("turn/started", "child-b", "b-1", "inProgress"));
+        const interrupt = vi.fn(async (_threadId: string, _turnId: string) => {});
+        expect(await router.cancel(sessionId, interrupt)).toBe(false);
+        expect(await router.cancel("unknown", interrupt)).toBe(false);
+        expect(await router.cancel("child-a", interrupt)).toBe(true);
+        expect(interrupt.mock.calls).toEqual([["child-a", "a-1"]]);
+        await router.handle(turn("turn/completed", "child-a", "a-1", "completed"));
+        await router.handle(turn("turn/started", "child-a", "a-2", "inProgress"));
+        expect(await router.cancel("child-a", interrupt)).toBe(false);
+        expect(await router.cancel("child-a:generation:2", interrupt)).toBe(true);
+        expect(interrupt.mock.calls.at(-1)).toEqual(["child-a", "a-2"]);
+        await expect(router.cancel("child-b", async () => { throw new Error("interrupt failed"); })).rejects.toThrow("interrupt failed");
+        expect(await router.cancel("child-b", interrupt)).toBe(true);
+        expect(interrupt.mock.calls.at(-1)).toEqual(["child-b", "b-1"]);
+    });
+
+    it("continues replayed child generations without reusing a historical identity", async () => {
+        const router = new CodexSubagentEventRouter(sessionId, true,
+            new ACPSessionConnection(mockFixture.getAcpConnection(), sessionId));
+        router.restoreHistoryChild("child", {
+            parentThreadId: sessionId, parentSessionId: sessionId,
+            sessionId: "child:generation:3", name: "review", task: "review code",
+            generation: 3, terminalState: "completed",
+        });
+        await router.handle({method: "turn/started", params: {threadId: "child", turn: {
+            id: "new-turn", items: [], itemsView: "notLoaded", status: "inProgress", error: null,
+            startedAt: null, completedAt: null, durationMs: null,
+        }}});
+        const interrupt = vi.fn(async (_thread: string, _turn: string) => {});
+        expect(await router.cancel("child:generation:3", interrupt)).toBe(false);
+        expect(await router.cancel("child:generation:4", interrupt)).toBe(true);
+        expect(interrupt.mock.calls).toEqual([["child", "new-turn"]]);
+    });
+
 });

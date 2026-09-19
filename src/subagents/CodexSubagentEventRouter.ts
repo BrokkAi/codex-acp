@@ -39,6 +39,7 @@ export class CodexSubagentEventRouter {
     private static readonly DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
     private static readonly MAX_PENDING_NOTIFICATIONS = 256;
 
+    private readonly activeTurns = new Map<string, string>();
     private readonly children = new Map<string, NativeSubagent>();
     private readonly pendingSpawns = new Map<string, PendingSubagent>();
     private readonly terminalPendingSpawns = new Map<string, PendingSubagent>();
@@ -53,11 +54,35 @@ export class CodexSubagentEventRouter {
         private readonly session: ACPSessionConnection,
     ) {}
 
+    restoreHistoryChild(threadId: string, child: NativeSubagent): void {
+        if (!this.children.has(threadId)) this.children.set(threadId, child);
+    }
+
+    async cancel(sessionId: string, interrupt: (threadId: string, turnId: string) => Promise<void>): Promise<boolean> {
+        if (!this.supported) return false;
+        const entry = [...this.children.entries()].find(([, child]) => child.sessionId === sessionId && child.terminalState === undefined);
+        if (!entry) return false;
+        const [threadId] = entry;
+        const turnId = this.activeTurns.get(threadId);
+        if (!turnId) return false;
+        // Capture both identities before awaiting: a delayed response must never
+        // cancel a subsequent generation. Lifecycle events settle the child.
+        await interrupt(threadId, turnId);
+        return true;
+    }
+
     async handle(notification: ServerNotification): Promise<boolean> {
         if (notification.method === "turn/started") {
+            if (this.supported && notification.params.threadId !== this.rootSessionId) {
+                this.activeTurns.set(notification.params.threadId, notification.params.turn.id);
+                await this.reopen(notification.params.threadId);
+            }
             return this.isKnownChild(notification.params.threadId);
         }
         if (notification.method === "turn/completed") {
+            const activeTurn = this.activeTurns.get(notification.params.threadId);
+            if (activeTurn && activeTurn !== notification.params.turn.id) return this.isKnownChild(notification.params.threadId);
+            this.activeTurns.delete(notification.params.threadId);
             const childTurn = this.isKnownChild(notification.params.threadId);
             const state = terminalStateFromTurn(notification.params.turn.status);
             if (!state) return childTurn;
@@ -75,6 +100,10 @@ export class CodexSubagentEventRouter {
             return childTurn;
         }
         const notificationThreadId = (notification.params as {threadId?: unknown}).threadId;
+        const turnId = (notification.params as {turnId?: unknown}).turnId;
+        if (this.supported && typeof notificationThreadId === "string" && notificationThreadId !== this.rootSessionId && typeof turnId === "string" && !this.activeTurns.has(notificationThreadId)) {
+            this.activeTurns.set(notificationThreadId, turnId);
+        }
         if (typeof notificationThreadId === "string" && this.pendingSpawns.has(notificationThreadId)) {
             const pending = this.pendingSpawns.get(notificationThreadId)!;
             if (pending.buffered.length === CodexSubagentEventRouter.MAX_PENDING_NOTIFICATIONS) {
@@ -318,7 +347,7 @@ export class CodexSubagentEventRouter {
             subagentSessionId: childSessionId,
             name,
             task,
-            capabilities: {},
+            capabilities: {cancel: true},
         }, parentSessionId);
         this.children.set(childSessionId, {
             parentThreadId,
@@ -380,7 +409,7 @@ export class CodexSubagentEventRouter {
                 subagentSessionId: reopened.sessionId,
                 name: reopened.name,
                 task: reopened.task,
-                capabilities: {},
+                capabilities: {cancel: true},
             }, parentSessionId);
             this.children.set(childThreadId, reopened);
             this.terminalPendingSpawns.delete(childThreadId);
@@ -400,7 +429,7 @@ export class CodexSubagentEventRouter {
                 subagentSessionId: child.sessionId,
                 name: child.name,
                 task: child.task,
-                capabilities: {},
+                capabilities: {cancel: true},
             }, child.parentSessionId);
         }
         catch (error) {

@@ -1,3 +1,4 @@
+import {SUBAGENT_CANCEL_METHOD, type SubagentCancelExtRequest} from "./subagents/AcpSubagents";
 import type {
     ClientContext,
     ContentBlock,
@@ -79,6 +80,7 @@ export type ExtMethodRequest =
     | SessionSteeringExtRequest
     | GoalControlExtRequest
     | AsyncTaskStopExtRequest
+    | SubagentCancelExtRequest
 
 export function isExtMethodRequest(request: { method: string, params: Record<string, unknown> }): request is ExtMethodRequest {
     return request.method === "authentication/status"
@@ -87,7 +89,8 @@ export function isExtMethodRequest(request: { method: string, params: Record<str
         || request.method === GOAL_CONTROL_METHOD
         || request.method === LEGACY_GOAL_CONTROL_METHOD
         || request.method === SESSION_STEERING_METHOD
-        || request.method === ASYNC_TASK_STOP_METHOD;
+        || request.method === ASYNC_TASK_STOP_METHOD
+        || request.method === SUBAGENT_CANCEL_METHOD;
 }
 
 /**
