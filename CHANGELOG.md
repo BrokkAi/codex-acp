@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.5
+
+Expose capability-gated cancellation of a native child's active turn without interrupting its parent or siblings. Preserve native child generation identities when continuing replayed sessions, rejecting stale cancellation targets.
+
 ## 1.11.4
 
 Allow ACP clients to suppress Codex's native collaboration tools with the Claude-compatible `_meta.codex.options.disallowedTools` session option. The policy survives new, resumed, loaded, forked, and provider-restarted sessions so clients can substitute their own sub-agent implementation reliably.
