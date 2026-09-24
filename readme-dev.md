@@ -9,7 +9,7 @@ Set `CODEX_PATH` to run a different Codex binary; versions other than the one sp
 - `CODEX_CONFIG` - JSON object merged into the Codex session config.
 - `MODEL_PROVIDER` - model provider to pass to Codex for new sessions.
 - `DEFAULT_AUTH_REQUEST` - ACP auth request JSON used when Codex requires authentication.
-- `INITIAL_AGENT_MODE` - initial mode id: `read-only`, `agent`, or `agent-full-access`. In the BrokkAi fork, `agent` preserves Codex's configured sandbox and uses automatic approval review; `agent-full-access` selects unrestricted permissions from startup.
+- `INITIAL_AGENT_MODE` - initial mode id: `read-only`, `workspace-write`, `agent`, or `agent-full-access`. In the BrokkAi fork, `agent` preserves Codex's configured sandbox and uses automatic approval review; `agent-full-access` selects unrestricted permissions from startup.
 - `NO_BROWSER` - hide browser-based ChatGPT auth when set.
 - `APP_SERVER_LOGS` - directory for adapter logs.
 
@@ -123,3 +123,26 @@ terminal children, and stale generation IDs return `{cancelled: false}`. Errors
 from Codex propagate to the caller. Parent and sibling turns are unaffected.
 Replayed children remain read-only; continuing a child publishes a new generation
 with live capabilities. Closing and direct prompting are not advertised.
+
+### Session notices
+
+The adapter implements [Session Notices](https://agentclientprotocol.com/rfds/session-notices)
+for Codex warnings, configuration warnings, deprecation notices, model rerouting, and the legacy
+`thread/compacted` advisory when the client advertises `clientCapabilities.session.notices: {}`.
+These are live `session/update` notifications with
+`sessionUpdate: "notice"`, a severity, a plain-text title, and optional description.
+They are not replayed from session history and repeated notices remain independent events.
+
+Without that capability (including absent or null capability objects), the adapter preserves
+the existing assistant/thought text or AIR `sessionFailure` advisory records. When notices are
+enabled, they take precedence over AIR advisory records. Clients control their presentation;
+the adapter does not rely on notices being displayed.
+
+Command replies, review results, and terminal/retrying errors retain their existing response or
+failure channels. Clients advertising session compaction support continue to receive the dedicated
+compaction lifecycle instead of the legacy completion advisory.
+
+### AIR diff statistics
+
+See the [diff statistics specification](docs/diff-statistics-extension.md) for the
+`_meta.jetbrains.air.diffStats` payload and its compatibility rules.

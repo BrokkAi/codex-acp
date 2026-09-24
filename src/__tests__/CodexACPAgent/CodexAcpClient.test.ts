@@ -49,7 +49,9 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             codexAcpAgent.newSession({cwd: "", mcpServers: []})
         ).rejects.toThrow("Authentication required");
 
-        const transportDump = authFixture.getCodexConnectionDump(ignoredFields);
+        const transportDump = authFixture.getCodexConnectionDump(ignoredFields, {
+            placeholderResponseMethods: ["account/read"],
+        });
         await expect(transportDump).toMatchFileSnapshot("data/auth-failed.json");
     });
 
@@ -447,6 +449,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                 availabilityNux: null,
                 modelSpecialty: null,
                 multiAgentVersion: null,
+                availableAccessPrograms: null,
                 displayName: "gpt-5",
                 description: "test model",
                 hidden: false,
@@ -524,6 +527,9 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         expect(threadStartRequest.config?.["sandbox_workspace_write"]).toEqual({
             writable_roots: ["/workspace/extra"],
         });
+        expect(threadStartRequest.config?.["features"]).toMatchObject({
+            cwd_relative_turn_diffs: false,
+        });
     });
 
     it('applies ACP additional directories to resumed and loaded sessions explicitly', async () => {
@@ -574,12 +580,14 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             "/workspace/load-extra": {trust_level: "trusted"},
         });
         expect(threadResumeSpy.mock.calls[0]![0].config?.["features"]).toEqual({
+            cwd_relative_turn_diffs: false,
             multi_agent: false,
             multi_agent_v2: false,
         });
         expect(threadResumeSpy.mock.calls[0]![0].config?.["agents"]).toEqual({enabled: false});
         expect(threadResumeSpy.mock.calls[1]![0].config?.["agents"]).toEqual({enabled: false});
         expect(threadResumeSpy.mock.calls[1]![0].config?.["features"]).toEqual({
+            cwd_relative_turn_diffs: false,
             multi_agent: false,
             multi_agent_v2: false,
         });
@@ -631,6 +639,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     "/workspace/extra": {trust_level: "trusted"},
                 },
                 features: {
+                    cwd_relative_turn_diffs: false,
                     multi_agent: false,
                     multi_agent_v2: false,
                 },
@@ -3550,6 +3559,8 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     runtimeStatus: null,
                     pluginId: null,
                     serverInfo: null,
+                    serverCapabilities: null,
+                    toolsError: null,
                     tools: {listFiles: {name: "listFiles", inputSchema: {type: "object"}}},
                     resources: [{name: "workspace", uri: "file:///workspace"}],
                     resourceTemplates: [],
@@ -3560,6 +3571,8 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     runtimeStatus: null,
                     pluginId: null,
                     serverInfo: null,
+                    serverCapabilities: null,
+                    toolsError: null,
                     tools: {},
                     resources: [],
                     resourceTemplates: [],
@@ -3609,6 +3622,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             availabilityNux: null,
             modelSpecialty: null,
             multiAgentVersion: null,
+            availableAccessPrograms: null,
             displayName: 'Codex 5.2',
             description: 'Coding model',
             hidden: false,
@@ -3632,6 +3646,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             availabilityNux: null,
             modelSpecialty: null,
             multiAgentVersion: null,
+            availableAccessPrograms: null,
             displayName: 'Standard 5.1',
             description: 'Standard model',
             hidden: false,
@@ -3901,6 +3916,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                 spendControlReached: null,
                 planType: null,
                 rateLimitReachedType: null,
+                normalModelSlug: null,
             }
         });
         rateLimits.set("limit-2", {
@@ -3916,6 +3932,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                 spendControlReached: null,
                 planType: null,
                 rateLimitReachedType: null,
+                normalModelSlug: null,
             }
         });
 
@@ -3928,6 +3945,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
     it ('should refresh the complete rate-limit snapshot for status', async () => {
         const {mockFixture, sessionState} = setupPromptFixture();
         vi.spyOn(mockFixture.getCodexAcpClient(), "getRateLimits").mockResolvedValue({
+            ordinaryUsageAllowed: null,
             rateLimits: {
                 limitId: "codex",
                 limitName: "Codex",
@@ -3943,6 +3961,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                 spendControlReached: null,
                 planType: null,
                 rateLimitReachedType: null,
+                normalModelSlug: null,
             },
             rateLimitsByLimitId: null,
             rateLimitResetCredits: null,
@@ -4081,6 +4100,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     individualLimit: null,
                     planType: null,
                     rateLimitReachedType: null,
+                    normalModelSlug: null,
                 }
             }
         });
@@ -4097,6 +4117,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     individualLimit: null,
                     planType: null,
                     rateLimitReachedType: null,
+                    normalModelSlug: null,
                 }
             }
         });
@@ -4116,6 +4137,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                 individualLimit: null,
                 planType: null,
                 rateLimitReachedType: null,
+                normalModelSlug: null,
             }
         });
         expect(sessionState.rateLimits!.get("fast-limit")).toEqual({
@@ -4130,6 +4152,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                 individualLimit: null,
                 planType: null,
                 rateLimitReachedType: null,
+                normalModelSlug: null,
             }
         });
     });
@@ -4150,6 +4173,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     spendControlReached: null,
                     planType: null,
                     rateLimitReachedType: null,
+                    normalModelSlug: null,
                 },
             }],
             ["codex_other", {
@@ -4165,6 +4189,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     spendControlReached: null,
                     planType: null,
                     rateLimitReachedType: null,
+                    normalModelSlug: null,
                 },
             }],
         ]);
@@ -4187,6 +4212,7 @@ describe('ACP server test', { timeout: 40_000 }, () => {
                     spendControlReached: null,
                     planType: null,
                     rateLimitReachedType: null,
+                    normalModelSlug: null,
                 },
             },
         });
