@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+Honor the steering option `_meta.steering.idleBehavior: "promptRequired"`. When no turn can accept a steered message, return it to the client with `{outcome: "promptRequired", reason: "noRunningTurn"}` instead of starting a turn the client did not request. Reject unknown idle behaviors, and advertise `idleBehaviors: ["promptRequired"]` in the steering capability.
+
+Merge upstream releases 1.12.0 through 1.13.1, with Codex 0.156.1.
+
 ## 1.11.5
 
 Expose capability-gated cancellation of a native child's active turn without interrupting its parent or siblings. Preserve native child generation identities when continuing replayed sessions, rejecting stale cancellation targets.

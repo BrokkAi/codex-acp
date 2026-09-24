@@ -122,14 +122,28 @@ export async function legacySetSessionModel(
     return await connection.request<LegacySetSessionModelResponse, LegacySetSessionModelRequest>(LEGACY_SET_SESSION_MODEL_METHOD, params);
 }
 
+/**
+ * What a steer does when the session has no running turn. `promptRequired`
+ * leaves the prompt with the client, which submits it as a normal
+ * `session/prompt`. Without it, the adapter starts a new turn itself.
+ */
+export type SteeringIdleBehavior = "promptRequired";
+
+export const STEERING_IDLE_BEHAVIORS: readonly SteeringIdleBehavior[] = ["promptRequired"];
+
 export type SessionSteerRequest = {
     sessionId: SessionId;
     prompt: ContentBlock[];
+    _meta?: {
+        steering?: {
+            idleBehavior?: SteeringIdleBehavior;
+        };
+    };
 }
 
-export type SessionSteeringResponse = {
-    outcome: "injected" | "startedNewTurn" | "failed";
-}
+export type SessionSteeringResponse =
+    | {outcome: "injected" | "startedNewTurn" | "failed"}
+    | {outcome: "promptRequired"; reason: "noRunningTurn"};
 
 export type SessionSteeringExtRequest = {
     method: typeof SESSION_STEERING_METHOD;

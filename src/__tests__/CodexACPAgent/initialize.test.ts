@@ -70,6 +70,7 @@ describe('CodexACPAgent - initialize', () => {
                 execution: {version: 1},
                 steering: {
                     supported: true,
+                    idleBehaviors: ["promptRequired"],
                 },
                 goal: {
                     version: 1,

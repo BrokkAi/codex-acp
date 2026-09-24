@@ -124,6 +124,25 @@ from Codex propagate to the caller. Parent and sibling turns are unaffected.
 Replayed children remain read-only; continuing a child publishes a new generation
 with live capabilities. Closing and direct prompting are not advertised.
 
+### Steering
+
+Clients inject a message into the running turn with the `_session/steering`
+request: `{sessionId, prompt}`. Initialize advertises it as
+`_meta.steering: {supported: true, idleBehaviors: ["promptRequired"]}`.
+
+The reply is `{outcome: "injected"}` when the message joined the running turn.
+When no turn can accept it, the adapter starts a new turn itself and replies
+`{outcome: "startedNewTurn"}`. That turn belongs to no `session/prompt`.
+
+A client that wants to own every turn sends
+`_meta: {steering: {idleBehavior: "promptRequired"}}`. When no turn can accept
+the message, the adapter then starts nothing and replies
+`{outcome: "promptRequired", reason: "noRunningTurn"}`, and the client submits
+the prompt as a normal `session/prompt`. This includes a turn that ends while
+the steer is being delivered. The adapter rejects other `idleBehavior` values
+with `invalidParams` so that a client never mistakes an ignored option for an
+accepted one.
+
 ### Session notices
 
 The adapter implements [Session Notices](https://agentclientprotocol.com/rfds/session-notices)
