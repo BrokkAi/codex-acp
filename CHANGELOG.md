@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.13.2
 
 Honor the steering option `_meta.steering.idleBehavior: "promptRequired"`. When no turn can accept a steered message, return it to the client with `{outcome: "promptRequired", reason: "noRunningTurn"}` instead of starting a turn the client did not request. Reject unknown idle behaviors, and advertise `idleBehaviors: ["promptRequired"]` in the steering capability.
 
