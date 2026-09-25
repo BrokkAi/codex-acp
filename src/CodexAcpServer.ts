@@ -122,7 +122,7 @@ import {
     createCodexMessagePhaseMeta,
     createUserMessageChunk,
 } from "./ContentChunks";
-import {sameThreadGoalSnapshot, type ThreadGoalSnapshot, toThreadGoalSnapshot,} from "./ThreadGoalSnapshot";
+import {goalLimitReason, sameThreadGoalSnapshot, type ThreadGoalSnapshot, toThreadGoalSnapshot,} from "./ThreadGoalSnapshot";
 import {
     clientSupportsSubagents,
     type SubagentAwareSessionCapabilities,
@@ -535,7 +535,11 @@ export class CodexAcpServer {
                     if (expected) {
                         await this.codexAcpClient.waitForSessionNotifications(sessionState.sessionId);
                         const current = await this.codexAcpClient.getGoal(sessionState.sessionId);
-                        if (!current || (current.status !== "active" && current.status !== "paused")) return {};
+                        // A goal stopped by the account usage limit resumes once the limit resets; one
+                        // whose own budget is spent waits for the user.
+                        if (!current || !(current.status === "active"
+                            || current.status === "paused"
+                            || goalLimitReason(current) === "usage")) return {};
                         if (current.objective.trim() !== expected.objective || current.createdAt * 1000 !== expected.createdAt) {
                             throw RequestError.invalidRequest("The goal changed before it could be resumed");
                         }

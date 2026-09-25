@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.3
+
+Report why a `limited` goal stopped, as `limitReason: "usage"` for the account usage limit or `"budget"` for the goal's own token budget. A spent budget counts as `budget` even when Codex recorded the usage limit last. Identity-checked `_session/goal` resume now restarts a goal stopped by the usage limit, so a client can continue it after the limit resets. A goal whose budget is spent still waits for the user.
+
 ## 1.13.2
 
 Honor the steering option `_meta.steering.idleBehavior: "promptRequired"`. When no turn can accept a steered message, return it to the client with `{outcome: "promptRequired", reason: "noRunningTurn"}` instead of starting a turn the client did not request. Reject unknown idle behaviors, and advertise `idleBehaviors: ["promptRequired"]` in the steering capability.

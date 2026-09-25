@@ -1,6 +1,7 @@
 import {describe, expect, it, vi} from "vitest";
 import {createCodexMockTestFixture, createTestModel} from "../acp-test-utils";
 import type {ThreadGoal, ThreadResumeResponse, ThreadReadResponse} from "../../app-server/v2";
+import {toThreadGoalSnapshot} from "../../ThreadGoalSnapshot";
 
 const sessionId = "goal-recovery";
 const storedGoal: ThreadGoal = {
@@ -120,6 +121,43 @@ describe("goal recovery", () => {
         await expect(agent.extMethod("_session/goal", {sessionId, action, expectedGoal: {objective: "a replaced goal", createdAt: 100000}})).rejects.toMatchObject({code: -32600});
         expect(resume).not.toHaveBeenCalled();
         await agent.closeSession({sessionId});
+    });
+
+    it("resumes a goal stopped by the account usage limit", async () => {
+        const {agent, client, goal} = await fixtureForGoal();
+        goal.value.status = "usageLimited";
+        await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: []});
+        const resume = vi.spyOn(client, "resumeGoal").mockImplementation(async (_session, onTurnStarted) => {
+            onTurnStarted?.("resumed");
+            return null;
+        });
+        await agent.extMethod("_session/goal", {sessionId, action: "resume", expectedGoal: {objective: storedGoal.objective, createdAt: 100000}});
+        expect(resume).toHaveBeenCalledOnce();
+        await agent.closeSession({sessionId});
+    });
+
+    it.each([
+        ["budgetLimited", 1234],
+        ["usageLimited", 9000],
+    ] as const)("leaves a %s goal with %d tokens used for the user", async (status, tokensUsed) => {
+        const {agent, client, goal} = await fixtureForGoal();
+        goal.value = {...goal.value, status, tokensUsed};
+        await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: []});
+        const resume = vi.spyOn(client, "resumeGoal");
+        await agent.extMethod("_session/goal", {sessionId, action: "resume", expectedGoal: {objective: storedGoal.objective, createdAt: 100000}});
+        expect(resume).not.toHaveBeenCalled();
+        await agent.closeSession({sessionId});
+    });
+
+    it.each([
+        ["usageLimited", 1234, "usage"],
+        ["usageLimited", 9000, "budget"],
+        ["budgetLimited", 1234, "budget"],
+        ["active", 1234, undefined],
+    ] as const)("publishes a %s goal with %d tokens used as limit reason %s", (status, tokensUsed, reason) => {
+        const snapshot = toThreadGoalSnapshot({...storedGoal, status, tokensUsed});
+        expect(snapshot.limitReason).toBe(reason);
+        expect(snapshot.status).toBe(status === "active" ? "active" : "limited");
     });
 
 });

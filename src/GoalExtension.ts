@@ -16,9 +16,17 @@ export type GoalCapability = {
 
 export type GoalStatus = "active" | "paused" | "blocked" | "limited" | "complete";
 
+/**
+ * Why a `limited` goal stopped. `usage` is the account's usage limit, which ends when the limit
+ * resets. `budget` is the goal's own token budget, which only the user can raise; it wins whenever
+ * the budget is spent, even if Codex recorded the usage limit last.
+ */
+export type GoalLimitReason = "usage" | "budget";
+
 export type GoalSnapshot = {
     objective: string;
     status: GoalStatus;
+    limitReason?: GoalLimitReason;
     iterations?: number;
     lastReason?: string | null;
     createdAt?: number;
