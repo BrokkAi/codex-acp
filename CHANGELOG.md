@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.4
+
+Preserve the GPT family prefix in model picker labels, including GPT 6 Astra.
+
 ## 1.13.3
 
 Report why a `limited` goal stopped, as `limitReason: "usage"` for the account usage limit or `"budget"` for the goal's own token budget. A spent budget counts as `budget` even when Codex recorded the usage limit last. Identity-checked `_session/goal` resume now restarts a goal stopped by the usage limit, so a client can continue it after the limit resets. A goal whose budget is spent still waits for the user.
