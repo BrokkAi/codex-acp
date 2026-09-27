@@ -7,13 +7,13 @@ export const MODEL_CONFIG_ID = "model";
 export const REASONING_EFFORT_CONFIG_ID = "reasoning_effort";
 
 /**
- * Turn Codex's GPT display ids into compact picker labels without coupling the
+ * Turn Codex's GPT display ids into readable picker labels without coupling the
  * adapter to a particular model catalog. Custom/provider model names remain
  * untouched because their punctuation may be meaningful.
  */
 export function formatModelDisplayName(displayName: string): string {
     if (!/^gpt-/i.test(displayName)) return displayName;
-    return displayName
+    return "GPT " + displayName
         .replace(/^gpt-/i, "")
         .split(/[-/]+/)
         .filter(Boolean)
