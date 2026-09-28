@@ -971,6 +971,16 @@ export class CodexAcpClient {
      * Create a codex config entry for MCP server
      */
     private createMcpSeverConfig(mcpServer: McpServer): JsonObject {
+        const codex = mcpServer._meta?.["codex"];
+        if (codex !== undefined && (typeof codex !== "object" || codex === null || Array.isArray(codex))) {
+            throw RequestError.invalidParams(undefined, "MCP server _meta.codex must be an object");
+        }
+        const mode = (codex as Record<string, unknown> | undefined)?.["defaultToolsApprovalMode"];
+        if (mode !== undefined && mode !== "auto" && mode !== "prompt" && mode !== "writes" && mode !== "approve") {
+            throw RequestError.invalidParams(undefined,
+                "MCP server _meta.codex.defaultToolsApprovalMode must be auto, prompt, writes, or approve");
+        }
+        const policy: JsonObject = mode === undefined ? {} : {default_tools_approval_mode: mode};
         if ("type" in mcpServer) {
             switch (mcpServer.type) {
                 case "acp":
@@ -979,12 +989,14 @@ export class CodexAcpClient {
                     throw RequestError.invalidRequest("Codex doesn't support MCP SSE transport protocol")
                 case "http":
                     return {
+                        ...policy,
                         "url": mcpServer.url,
                         "http_headers": Object.fromEntries(mcpServer.headers.map(h => [h.name, h.value])),
                     }
             }
         }
         return {
+            ...policy,
             "command": mcpServer.command,
             "args": mcpServer.args,
             "env": Object.fromEntries(mcpServer.env.map(env => [env.name, env.value])),

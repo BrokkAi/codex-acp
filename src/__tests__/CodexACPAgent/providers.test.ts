@@ -215,6 +215,8 @@ describe("Configurable LLM providers (providers/*)", () => {
             sessionId: "thread-1",
             cwd: "/one",
             disallowedTools: ["spawn_agent"],
+            mcpServers: [{name: "owned", command: "worker", args: [], env: [],
+                _meta: {codex: {defaultToolsApprovalMode: "approve"}}}],
         });
         const secondSession = createTestSessionState({sessionId: "thread-2", cwd: "/two"});
         const firstSessionPrepare = vi.spyOn(firstSession.asyncTasks, "prepareForAppServerReplacement");
@@ -242,6 +244,7 @@ describe("Configurable LLM providers (providers/*)", () => {
             sessionId: "thread-1",
             cwd: "/one",
             _meta: {codex: {options: {disallowedTools: ["spawn_agent"]}}},
+            mcpServers: firstSession.mcpServers,
         }));
         expect(firstGatewayResume).toHaveBeenCalledWith({
             sessionId: "thread-2",

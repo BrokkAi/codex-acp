@@ -167,3 +167,15 @@ compaction lifecycle instead of the legacy completion advisory.
 
 See the [diff statistics specification](docs/diff-statistics-extension.md) for the
 `_meta.jetbrains.air.diffStats` payload and its compatibility rules.
+
+### MCP server approval policy
+
+Each MCP server in `mcpServers` may set `_meta.codex.defaultToolsApprovalMode`
+to `auto`, `prompt`, `writes`, or `approve`. The bridge forwards this as Codex's
+`default_tools_approval_mode` for that server. `approve` pre-approves its tools;
+omitting the field leaves the native default in effect. Explicit per-tool
+settings still take precedence. This metadata travels with the server through
+new, load, resume, fork, and provider restart. Invalid values are rejected.
+Clients should attach it only to registrations they intend to pre-approve;
+server names alone do not imply trust. Mjolnir sends `approve` for its owned
+servers in Guardian mode and leaves yolo registrations unchanged.

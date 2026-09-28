@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.5
+
+Forward explicit per-server MCP approval policy from ACP metadata to Codex. Clients can pre-approve their own tools in Guardian mode without changing approval behavior for other servers or commands. Preserve the policy across new, loaded, resumed, forked, and provider-restarted sessions.
+
 ## 1.13.4
 
 Preserve the GPT family prefix in model picker labels, including GPT 6 Astra.
