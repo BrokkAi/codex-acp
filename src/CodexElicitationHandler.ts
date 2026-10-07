@@ -5,10 +5,13 @@ import type {JsonValue} from "./app-server/serde_json/JsonValue";
 import type {
     McpServerElicitationRequestParams,
     McpServerElicitationRequestResponse,
+    ItemCompletedNotification,
     ToolRequestUserInputParams,
     ToolRequestUserInputResponse,
 } from "./app-server/v2";
 import { logger } from "./Logger";
+import {ACPSessionConnection} from "./ACPSessionConnection";
+import {createAgentTextMessageChunk} from "./ContentChunks";
 import type {AcpClientConnection} from "./ACPSessionConnection";
 import {
     clientSupportsFormElicitation,
@@ -169,6 +172,7 @@ export class CodexElicitationHandler implements ElicitationHandler {
     //
     // The app-server handler exposes URL elicitationId, while serverRequest/resolved only exposes
     // threadId here, so accepted URL elicitations are completed at thread scope.
+    private readonly seenAsyncQuestions = new Set<string>();
     private readonly pendingUrlElicitations = new Map<string, Set<string>>();
 
     constructor(
@@ -277,6 +281,68 @@ export class CodexElicitationHandler implements ElicitationHandler {
             logger.error("Error handling Codex user input request", error);
             return { answers: {} };
         }
+    }
+
+    /** Async messages are notifications: waiting for a form must never block their queue. */
+    handleAsyncUserInput(
+        event: ItemCompletedNotification,
+        sessionId: string,
+        lifetime: AbortSignal,
+        deliver: (text: string) => Promise<void>,
+    ): void {
+        const item = event.item;
+        if (item.type !== "agentMessage" || item.delivery !== "async"
+            || !item.questions?.length || !clientSupportsFormElicitation(this.clientCapabilities)) return;
+        const key = `${event.threadId}:${item.id}`;
+        if (this.seenAsyncQuestions.has(key)) return;
+        this.seenAsyncQuestions.add(key);
+        const params: ToolRequestUserInputParams = {
+            threadId: sessionId, turnId: event.turnId, itemId: item.id,
+            isBlocking: false, autoResolutionMs: null,
+            questions: item.questions.map((question, index) => ({
+                id: `question_${String(index + 1).padStart(2, "0")}`,
+                header: "", question: question.title, isOther: true, isSecret: false,
+                options: question.options?.map(label => ({label, description: ""})) ?? null,
+            })),
+        };
+        const request = this.buildUserInputRequest(params);
+        request.message = "Codex has questions for you. Work can continue while you answer.";
+        for (const question of params.questions) {
+            if (question.options?.length) {
+                const field = request.requestedSchema.properties?.[question.id];
+                if (field) Object.assign(field, {default: question.options[0]!.label});
+            }
+        }
+        // The session lifetime owns this form; prompt completion or a later prompt
+        // changing the synchronous cancellation signal must not dismiss it.
+        const answer = async () => {
+            const response = await this.connection.request(
+                acp.methods.client.elicitation.create, request, this.requestOptions(lifetime),
+            );
+            if (!acp.CreateElicitationResponse.isAccept(response) || lifetime.aborted) return;
+            const content = contentRecord(response.content);
+            const questionIds = new Set(params.questions.map(question => question.id));
+            const text = params.questions.map(question => {
+                const note = content[userInputNoteFieldId(question.id, questionIds)];
+                const value = typeof note === "string" && note.trim() ? note : content[question.id];
+                if (typeof value !== "string" || !value.trim() || value === USER_INPUT_OTHER_OPTION) {
+                    throw new Error(`No answer was supplied for ${question.question}`);
+                }
+                return `${question.question}\nAnswer: ${value.trim()}`;
+            }).join("\n\n");
+            await deliver(text);
+        };
+        void answer().catch(async error => {
+            if (lifetime.aborted) return;
+            logger.error("Failed to deliver async user input", error);
+            try {
+                await new ACPSessionConnection(this.connection, sessionId).update(
+                    createAgentTextMessageChunk(`Could not send your answer to Codex: ${String(error)}. Please send the answer again in chat.`),
+                );
+            } catch (publishError) {
+                logger.error("Failed to report async user input delivery failure", publishError);
+            }
+        });
     }
 
     private requestOptions(
@@ -404,7 +470,7 @@ export class CodexElicitationHandler implements ElicitationHandler {
         }
     }
 
-    private buildUserInputRequest(params: ToolRequestUserInputParams): acp.CreateElicitationRequest {
+    private buildUserInputRequest(params: ToolRequestUserInputParams): Extract<acp.CreateElicitationRequest, {mode: "form"}> {
         const properties: Record<string, acp.ElicitationPropertySchema> = {};
         const required: string[] = [];
         const questionIds = new Set(params.questions.map(question => question.id));

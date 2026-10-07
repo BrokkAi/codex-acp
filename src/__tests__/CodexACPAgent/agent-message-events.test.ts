@@ -80,6 +80,12 @@ describe("CodexEventHandler - agent message events", () => {
             },
         ];
 
+        // Completed async messages have no text delta, including the text fallback for a question.
+        notifications.push({method: "item/completed", params: {
+            threadId: sessionId, turnId: "turn-1", completedAtMs: 0,
+            item: {type: "agentMessage", id: "async-message", text: "This needs your attention.",
+                phase: "final_answer", memoryCitation: null, delivery: "async", questions: null},
+        }});
         await setupPromptAndSendNotifications(mockFixture, sessionId, sessionState, notifications);
 
         await expect(mockFixture.getAcpConnectionDump([])).toMatchFileSnapshot(

@@ -58,6 +58,66 @@ describe('Elicitation Events', () => {
         return setupSessionWithPendingPrompt();
     }
 
+    // Hard-won: mjolnir#1265: async question messages were acknowledged but never rendered or answered.
+    it("keeps async questions answerable after end_turn and delivers all answers atomically", async () => {
+        let answer!: (response: acp.CreateElicitationResponse) => void;
+        fixture.setElicitationResponse(new Promise(resolve => {answer = resolve;}));
+        const {promptPromise, completeTurn} = await setupSessionWithPendingPromptAndCapabilities({
+            elicitation: {form: {}},
+            _meta: {execution: {version: 1}, jetbrains: {air: {version: 1, capabilities: []}}},
+        });
+        const client = fixture.getCodexAcpClient();
+        const app = fixture.getCodexAppServerClient();
+        await vi.waitFor(() => expect(app.turnStart).toHaveBeenCalledTimes(1));
+        fixture.clearAcpConnectionDump();
+        const completed: ServerNotification = {method: "item/completed", params: {
+            threadId: sessionId, turnId: "turn-id", completedAtMs: 0,
+            item: {type: "agentMessage", id: "billing-question", phase: "final_answer",
+                memoryCitation: null, delivery: "async",
+                text: "Which AWS billing account?\n- Use the main-account role\n- Keep Bedrock billing in the CI account",
+                questions: [
+                    {title: "Which AWS billing account?", options: ["Use the main-account role", "Keep Bedrock billing in the CI account"]},
+                    {title: "Which fallback account?", options: ["Main", "CI"]},
+                    {title: "Which role name?", options: null},
+                ],
+            },
+        }};
+        fixture.sendServerNotification(completed);
+        fixture.sendServerNotification({method: "turn/completed", params: {threadId: sessionId,
+            turn: {id: "turn-id", items: [], itemsView: "notLoaded", status: "completed", error: null,
+                startedAt: null, completedAt: null, durationMs: null},
+        }});
+        await client.waitForSessionNotifications(sessionId);
+        completeTurn();
+        await promptPromise;
+        fixture.sendServerNotification(completed);
+        await client.waitForSessionNotifications(sessionId);
+        const forms = fixture.getAcpConnectionEvents([]).filter(event =>
+            event.method === "createElicitation");
+        expect(forms).toHaveLength(1);
+        expect(app.turnStart).toHaveBeenCalledTimes(1);
+        fixture.clearAcpConnectionDump();
+        answer({action: "accept", content: {
+            question_01: "Use the main-account role",
+            question_02_note: "Use a third account instead",
+            question_03: "example-bedrock-role",
+        }});
+        await vi.waitFor(() => expect(app.turnStart).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(fixture.getAcpConnectionEvents([]).some(event =>
+            event.method === "sessionUpdate" && event.args[0].update.sessionUpdate === "user_message_chunk")).toBe(true));
+        const updates = fixture.getAcpConnectionEvents([]);
+        fixture.clearAcpConnectionDump();
+        vi.mocked(app.turnStart).mockRejectedValueOnce(new Error("provider refused the answer"));
+        fixture.sendServerNotification({...completed, params: {...completed.params,
+            item: {...completed.params.item, id: "failed-answer"},
+        }});
+        await client.waitForSessionNotifications(sessionId);
+        await vi.waitFor(() => expect(fixture.getAcpConnectionDump([])).toContain("Could not send your answer to Codex"));
+        await expect(JSON.stringify({form: forms[0]!.args[0],
+            delivery: vi.mocked(app.turnStart).mock.calls[1]![0], updates,
+            failureUpdates: fixture.getAcpConnectionEvents([])}, null, 2)).toMatchFileSnapshot("data/async-user-input.json");
+    });
+
     describe('Form mode elicitation', () => {
         it('should use ACP form elicitation when the client supports it', async () => {
             const { promptPromise, completeTurn } = await setupSessionWithPendingPromptAndCapabilities({

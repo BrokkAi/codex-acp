@@ -1124,6 +1124,21 @@ export class CodexAcpServer {
         const interaction = async (event: ServerNotification) => {
             permission.handleNotification(event);
             await elicitation.handleNotification(event);
+            if (event.method === "item/completed") {
+                const sessionId = state.subagents.notificationSessionId(event);
+                elicitation.handleAsyncUserInput(event.params, sessionId, lifetime.signal, async text => {
+                    // Codex owns the start-or-steer decision atomically. No adapter-side
+                    // active-turn check or retry can race a turn completing here.
+                    await this.runWithProcessCheck(() => this.codexAcpClient.appServerClient.turnStart({
+                        threadId: event.params.threadId,
+                        clientUserMessageId: `async-answer:${event.params.item.id}`,
+                        input: [{type: "text", text, text_elements: []}],
+                    }));
+                    await new ACPSessionConnection(this.connection, sessionId).update(
+                        createUserMessageChunk({type: "text", text}, `async-answer:${event.params.item.id}`),
+                    );
+                });
+            }
         };
         await this.codexAcpClient.subscribeToSessionEvents(state.sessionId, async event => {
             if (lifetime.signal.aborted) return;

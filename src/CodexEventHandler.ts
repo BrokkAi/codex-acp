@@ -197,6 +197,7 @@ export class CodexEventHandler {
     private completedPlan: CompletedPlan | null = null;
     private readonly activeImageGenerationItems = new Set<string>();
     private readonly emittedImageViewItems = new Set<string>();
+    private readonly emittedAsyncMessages = new Set<string>();
     private readonly session: ACPSessionConnection;
     private readonly renderer: AcpToolCallRenderer;
     private readonly commands = new CommandReporter();
@@ -878,7 +879,12 @@ export class CodexEventHandler {
                 return this.renderer.render(this.subagents.legacyCollaborationCompleted(event.item));
             case "agentMessage":
                 this.rememberAgentMessagePhase(event.item);
-                return null;
+                if (event.item.delivery !== "async") return null;
+                const key = `${event.threadId}:${event.item.id}`;
+                if (this.emittedAsyncMessages.has(key)) return null;
+                this.emittedAsyncMessages.add(key);
+                return createAgentTextMessageChunk(event.item.text, event.item.id,
+                    createMessagePhaseMeta(event.item.phase, this.sessionState.clientCapabilities.airClient));
             case "plan":
                 return await this.createCompletedPlanEvent(event.item);
             case "exitedReviewMode":

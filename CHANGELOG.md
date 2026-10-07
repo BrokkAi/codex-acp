@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.6
+
+Show asynchronous Codex question and attention messages that arrive without streamed text. Keep question forms available after a turn ends, support suggested and custom answers, and deliver answers through Codex's atomic start-or-steer operation. Report delivery failures visibly. Merge upstream 2.1.1 and pin Codex 0.160.1 while preserving Mjolnir guardian grants, execution and goal recovery, tool restrictions, and owned subagent cancellation.
+
 ## 1.13.5
 
 Forward explicit per-server MCP approval policy from ACP metadata to Codex. Clients can pre-approve their own tools in Guardian mode without changing approval behavior for other servers or commands. Preserve the policy across new, loaded, resumed, forked, and provider-restarted sessions.
