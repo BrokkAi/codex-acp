@@ -149,7 +149,7 @@ async function main() {
         await codexAcpAgent.initialize({ protocolVersion: 1 });
 
         // Check auth
-        const authRequired = await codexAcpClient.authRequired();
+        const authRequired = (await codexAcpClient.readAuthRequirement()).required;
         if (authRequired) {
             console.error("Error: Authentication required. Please login to Codex first.");
             process.exit(1);

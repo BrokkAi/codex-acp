@@ -1,3 +1,5 @@
+import type {UpdateSessionEvent} from "./ACPSessionConnection";
+import {AIR_GOAL_KEY, withAirMeta} from "./AirExtension";
 import {GOAL_CONTROL_METHOD, type GoalLimitReason, type GoalSnapshot, type GoalStatus} from "./GoalExtension";
 import type {ThreadGoal} from "./app-server/v2";
 
@@ -64,4 +66,13 @@ export function sameThreadGoalSnapshot(
         && left.limitReason === right.limitReason
         && left.tokenBudget === right.tokenBudget
         && left.createdAt === right.createdAt;
+}
+
+/** AIR and Mjolnir opt into their respective goal metadata formats. */
+export function goalSessionInfoUpdate(goal: ThreadGoalSnapshot | null, airClient: boolean, mjClient = false): UpdateSessionEvent | null {
+    if (!airClient && !mjClient) return null;
+    return {
+        sessionUpdate: "session_info_update",
+        _meta: {...(airClient ? withAirMeta(undefined, AIR_GOAL_KEY, goal) : {}), ...(mjClient ? {goal} : {})},
+    };
 }

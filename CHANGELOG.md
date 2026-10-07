@@ -40,6 +40,60 @@ Report token usage across all requests in an ACP prompt, with explicit scope met
 - Publish the downstream adapter as `@brokkai/codex-acp` with an exact Codex dependency and tag-triggered releases.
 
 
+## [2.1.1](https://github.com/agentclientprotocol/codex-acp/compare/v2.1.0...v2.1.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* preserve attachments in imported session history ([#571](https://github.com/agentclientprotocol/codex-acp/issues/571)) ([b9fc02b](https://github.com/agentclientprotocol/codex-acp/commit/b9fc02b63e3267cb4350cab774219b947dae72da))
+* send the legacy custom answer key to AIR ([#577](https://github.com/agentclientprotocol/codex-acp/issues/577)) ([56cc428](https://github.com/agentclientprotocol/codex-acp/commit/56cc4287f13453e830b0c3801fea7db2d4379044))
+* show readable service error messages ([#572](https://github.com/agentclientprotocol/codex-acp/issues/572)) ([4578615](https://github.com/agentclientprotocol/codex-acp/commit/4578615599705a7a55fe7096fa90bf3c9fc1549a))
+
+## [2.1.0](https://github.com/agentclientprotocol/codex-acp/compare/v2.0.1...v2.1.0) (2026-10-01)
+
+
+### Features
+
+* add ACP v2 support ([#552](https://github.com/agentclientprotocol/codex-acp/issues/552)) ([ba7b216](https://github.com/agentclientprotocol/codex-acp/commit/ba7b21636190a95626631c9a9226298d41d19325))
+
+
+### Bug Fixes
+
+* mark the request_user_input note as the AIR custom answer ([#570](https://github.com/agentclientprotocol/codex-acp/issues/570)) ([2283d33](https://github.com/agentclientprotocol/codex-acp/commit/2283d33800aa2558135aaf0d4ad4041ee40260f9))
+* report a thread held by another Codex client as a clear error ([#564](https://github.com/agentclientprotocol/codex-acp/issues/564)) ([5065453](https://github.com/agentclientprotocol/codex-acp/commit/506545315e52c0593415d18b05dd2d3dbe527d32))
+* temporarily revert ACP v2 commit ba7b216 ([#573](https://github.com/agentclientprotocol/codex-acp/issues/573)) ([e46eed1](https://github.com/agentclientprotocol/codex-acp/commit/e46eed1ef4c1b64733969c66fe54197f4356db7d))
+
+## [2.0.1](https://github.com/agentclientprotocol/codex-acp/compare/v2.0.0...v2.0.1) (2026-09-29)
+
+
+### Bug Fixes
+
+* update codex to 0.159.0 ([#562](https://github.com/agentclientprotocol/codex-acp/issues/562)) ([9785e75](https://github.com/agentclientprotocol/codex-acp/commit/9785e75c1ffe110032b57e78ec2a2da17c2c81e2))
+* update codex to 0.159.1 ([#565](https://github.com/agentclientprotocol/codex-acp/issues/565)) ([645da2a](https://github.com/agentclientprotocol/codex-acp/commit/645da2a09f1b6fdfc6e6f28e781faf033d22a0d8))
+
+## [2.0.0](https://github.com/agentclientprotocol/codex-acp/compare/v1.13.1...v2.0.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* AIR tool call contract, exact diff patches, and fixes for every client ([#530](https://github.com/agentclientprotocol/codex-acp/issues/530))
+
+### Features
+
+* add  _meta.mcpStartupAwaitTimeoutMs option to allow awaiting for requested MCP servers startup outcome on session start ([#517](https://github.com/agentclientprotocol/codex-acp/issues/517)) ([cf6609e](https://github.com/agentclientprotocol/codex-acp/commit/cf6609e6be2f932251a7a379a0f3d2d79efd23d0))
+* AIR tool call contract, exact diff patches, and fixes for every client ([#530](https://github.com/agentclientprotocol/codex-acp/issues/530)) ([966a544](https://github.com/agentclientprotocol/codex-acp/commit/966a544bdb798de7f965df05ef66d2e3cb055364))
+
+
+### Bug Fixes
+
+* report authentication failures through ACP login flow ([#550](https://github.com/agentclientprotocol/codex-acp/issues/550)) ([2a26ee4](https://github.com/agentclientprotocol/codex-acp/commit/2a26ee44e07bdfbd6f2416a528fa2a6c18ff696d))
+* resolve ACP v1 conformance failures found by acp-tck ([#536](https://github.com/agentclientprotocol/codex-acp/issues/536)) ([1cc6223](https://github.com/agentclientprotocol/codex-acp/commit/1cc62233fb6f2abde7cadd518a53de9d0826ea77))
+* restore read-only mode and clarify access presets ([#480](https://github.com/agentclientprotocol/codex-acp/issues/480)) ([7fee150](https://github.com/agentclientprotocol/codex-acp/commit/7fee150a55098f7140a03907fec5f11edbe45086))
+* specify correct default behavior in mcp-stratup-await-timeout.md ([#551](https://github.com/agentclientprotocol/codex-acp/issues/551)) ([bf37821](https://github.com/agentclientprotocol/codex-acp/commit/bf37821e8f3c1f1e9b6954171855a9e2579cd2c9))
+* update codex to 0.157.0 ([#549](https://github.com/agentclientprotocol/codex-acp/issues/549)) ([7839796](https://github.com/agentclientprotocol/codex-acp/commit/78397963740f7263fdb8ae9178682d0fc714790e))
+* update codex to 0.157.1 ([#554](https://github.com/agentclientprotocol/codex-acp/issues/554)) ([9510cf1](https://github.com/agentclientprotocol/codex-acp/commit/9510cf18248023e1e165b422416919e43776b93e))
+* update codex to 0.158.0 ([#559](https://github.com/agentclientprotocol/codex-acp/issues/559)) ([59d0fb0](https://github.com/agentclientprotocol/codex-acp/commit/59d0fb0b6fd9dc85bf7c45f841f39a5225bea232))
+
 ## [1.13.1](https://github.com/agentclientprotocol/codex-acp/compare/v1.13.0...v1.13.1) (2026-09-23)
 
 
@@ -79,7 +133,6 @@ Report token usage across all requests in an ACP prompt, with explicit scope met
 ### Performance Improvements
 
 * derive file change reports from turn diffs ([#518](https://github.com/agentclientprotocol/codex-acp/issues/518)) ([caddefe](https://github.com/agentclientprotocol/codex-acp/commit/caddefe56ff55a3f0827aa8ad60d03779f168425))
-* supply validated diff statistics to ACP clients ([#501](https://github.com/agentclientprotocol/codex-acp/issues/501)) ([989a8f1](https://github.com/agentclientprotocol/codex-acp/commit/989a8f1735f2465f3db2e8acfa00a4da8f352c00))
 
 ## [1.11.0](https://github.com/agentclientprotocol/codex-acp/compare/v1.10.0...v1.11.0) (2026-09-09)
 

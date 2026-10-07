@@ -13,8 +13,8 @@ import type {
     ApprovalHandler,
     CodexAppServerClient,
     ElicitationHandler,
-    McpStartupResult,
 } from "./CodexAppServerClient";
+import type {McpServerStartupWaitOptions, McpStartupResult} from "./mcp/McpStartupTracker";
 import open from "open";
 import type {Disposable} from "vscode-jsonrpc";
 import type {
@@ -28,12 +28,15 @@ import {ModelId} from "./ModelId";
 import {AgentMode} from "./AgentMode";
 import path from "node:path";
 import {logger} from "./Logger";
+import {isAccountReadAuthFailureError, isAccountReadUnavailableError} from "./CodexThreadErrors";
 import {sanitizeMcpServerName} from "./McpServerName";
+import {normalizeSessionTitle} from "./SessionTitle";
 import type {
     AccountLoginCompletedNotification,
     AccountUpdatedNotification,
     GetAccountRateLimitsResponse,
     GetAccountResponse,
+    ListMcpServerStatusParams,
     ListMcpServerStatusResponse,
     McpServerOauthLoginCompletedNotification,
     McpServerOauthLoginParams,
@@ -48,6 +51,7 @@ import type {
     ThreadGoalStatus,
     ThreadResumeParams,
     ThreadSourceKind,
+    ThreadItem,
     TurnCompletedNotification,
     TurnSteerResponse,
     UserInput,
@@ -61,7 +65,12 @@ import {CodexSubagentSubscriptions} from "./subagents/CodexSubagentSubscriptions
 import {forkSession as runForkSession} from "./SessionFork";
 import type {SessionMetadata, SessionMetadataWithThread} from "./SessionMetadata";
 import {applyDisallowedTools, readDisallowedTools} from "./DisallowedTools";
-import {isMissingRolloutError, isUnknownThreadError} from "./CodexThreadErrors";
+import {
+    isMissingRolloutError,
+    isThreadActiveWriterError,
+    isUnknownThreadError,
+    threadActiveWriterRequestError,
+} from "./CodexThreadErrors";
 export type {SessionMetadata, SessionMetadataWithThread} from "./SessionMetadata";
 
 /**
@@ -74,8 +83,10 @@ type ResumedThread = {
     modelProvider: string;
     reasoningEffort: ReasoningEffort | null;
     serviceTier: string | null;
-    turnsBackwardsCursor: string | null;
+    itemsBackwardsCursor: string | null;
     materialized: boolean;
+    /** The mode that the resume response reports. Null when the thread has no rollout yet. */
+    collaborationMode: ModeKind | null;
 };
 
 /**
@@ -97,6 +108,14 @@ export type CreateUrlElicitationRequest = Extract<acp.CreateElicitationRequest, 
  * supplies the rest (`mode`, `requestId`) when sending `elicitation/create`.
  */
 export type UrlElicitationRequest = Omit<CreateUrlElicitationRequest, "mode" | "requestId">;
+
+/** The answer of {@link CodexAcpClient.readAuthRequirement}. */
+export interface AuthRequirement {
+    /** Whether the agent needs a login before it opens a session. */
+    required: boolean;
+    /** The account read that gave the answer, or `null` when the adapter did not read the account. */
+    account: GetAccountResponse | null;
+}
 
 export interface UrlElicitationRequester {
     elicitUrl(request: UrlElicitationRequest): Promise<acp.CreateElicitationResponse>;
@@ -203,8 +222,7 @@ export class CodexAcpClient {
     }
 
     private async authenticateWithChatGpt(): Promise<Boolean> {
-        const accountResponse = await this.codexClient.accountRead({refreshToken: true});
-        if (accountResponse.account?.type === "chatgpt") {
+        if (await this.hasWorkingChatGptLogin()) {
             return true;
         }
         const loginCompletedPromise = this.awaitNextLoginCompleted();
@@ -216,9 +234,33 @@ export class CodexAcpClient {
         return result.success;
     }
 
+    /**
+     * Reads with a token refresh whether the agent has a ChatGPT login that a new login does not need to replace.
+     *
+     * An unavailable read answers `true`: only a ChatGPT login runs the routing discovery that failed, see
+     * {@link isAccountReadUnavailableError}, and a new login cannot run without the network either.
+     * A read that failed because the login does not work answers `false`, so a new login replaces it, see
+     * {@link isAccountReadAuthFailureError}. Another error rejects.
+     */
+    private async hasWorkingChatGptLogin(): Promise<boolean> {
+        try {
+            const accountResponse = await this.codexClient.accountRead({refreshToken: true});
+            return accountResponse.account?.type === "chatgpt";
+        } catch (error) {
+            if (isAccountReadUnavailableError(error)) {
+                logger.log("Account read unavailable, so the stored ChatGPT login stays", {error: String(error)});
+                return true;
+            }
+            if (isAccountReadAuthFailureError(error)) {
+                logger.log("The stored ChatGPT login does not work, so a new login starts", {error: String(error)});
+                return false;
+            }
+            throw error;
+        }
+    }
+
     private async authenticateWithChatGptDeviceCode(urlElicitationRequester?: UrlElicitationRequester): Promise<Boolean> {
-        const accountResponse = await this.codexClient.accountRead({refreshToken: true});
-        if (accountResponse.account?.type === "chatgpt") {
+        if (await this.hasWorkingChatGptLogin()) {
             return true;
         }
         if (!urlElicitationRequester) {
@@ -342,17 +384,18 @@ export class CodexAcpClient {
         await accountUpdatedPromise;
     }
 
-    async authRequired(): Promise<Boolean> {
+    /** Reads whether the agent needs a login, with the account read that gave the answer. */
+    async readAuthRequirement(): Promise<AuthRequirement> {
         if (this.gatewayConfig != null) {
             // The authentication is already in progress:
             // the gateway config is set during the authentication request processing.
             // We assume that custom model providers will handle authentication themselves,
             // so Codex will not need to require it.
-            return false;
+            return {required: false, account: null};
         }
 
-        const response = await this.codexClient.accountRead({refreshToken: false})
-        return response.requiresOpenaiAuth && !response.account;
+        const response = await this.codexClient.accountRead({refreshToken: false});
+        return {required: response.requiresOpenaiAuth && !response.account, account: response};
     }
 
     /**
@@ -544,6 +587,9 @@ export class CodexAcpClient {
      * so `thread/read` answers for it and gives back the same state resume
      * would have. A thread id Codex has genuinely never seen fails both calls,
      * and the original resume error is what the caller sees.
+     *
+     * A thread that another Codex client has loaded fails with a clear ACP
+     * error instead of the raw Codex message.
      */
     private async resumeThread(params: ThreadResumeParams): Promise<ResumedThread> {
         try {
@@ -554,10 +600,12 @@ export class CodexAcpClient {
                 modelProvider: response.modelProvider,
                 reasoningEffort: response.reasoningEffort,
                 serviceTier: response.serviceTier,
-                turnsBackwardsCursor: response.turnsBackwardsCursor,
+                itemsBackwardsCursor: response.itemsBackwardsCursor ?? null,
                 materialized: true,
+                collaborationMode: response.collaborationMode?.mode ?? null,
             };
         } catch (err) {
+            if (isThreadActiveWriterError(err)) throw threadActiveWriterRequestError(params.threadId, err);
             if (!isMissingRolloutError(err)) throw err;
             let response;
             try {
@@ -577,8 +625,9 @@ export class CodexAcpClient {
                 // An unmaterialized thread has no persisted history to hydrate:
                 // `thread/turns/list` rejects it outright ("not materialized
                 // yet"), and there is nothing to list either way.
-                turnsBackwardsCursor: null,
+                itemsBackwardsCursor: null,
                 materialized: false,
+                collaborationMode: null,
             };
         }
     }
@@ -599,9 +648,10 @@ export class CodexAcpClient {
         }
         this.subagents.prepare(request.sessionId);
         onSubscribed?.();
+        const sessionConfig = await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? [], disallowedTools);
         const response = await this.resumeThread({
             excludeTurns: true,
-            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? [], disallowedTools),
+            config: sessionConfig.config,
             cwd: request.cwd,
             modelProvider: await this.getResumeModelProvider(),
             threadId: request.sessionId,
@@ -612,11 +662,13 @@ export class CodexAcpClient {
             sessionId: request.sessionId,
             currentModelId: currentModelId,
             models: codexModels,
-            collaborationMode: this.getCollaborationMode(response.thread.id),
+            // Codex sends no thread/settings/updated on a resume. The response holds the mode.
+            collaborationMode: response.collaborationMode ?? this.getCollaborationMode(response.thread.id),
             modelProvider: response.modelProvider,
             currentServiceTier: response.serviceTier as ServiceTier ?? null,
             additionalDirectories,
             disallowedTools,
+            skippedMcpServers: sessionConfig.skippedMcpServers,
         }
     }
 
@@ -652,42 +704,70 @@ export class CodexAcpClient {
         }
         this.subagents.prepare(request.sessionId);
         onSubscribed?.();
+        const sessionConfig = await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? [], disallowedTools);
         const response = await this.resumeThread({
             excludeTurns: true,
-            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers ?? [], disallowedTools),
+            config: sessionConfig.config,
             cwd: request.cwd,
             modelProvider: await this.getResumeModelProvider(),
             threadId: request.sessionId,
         });
         // Resume cursors bound durable history; later turns arrive through live events.
         // A null paginated cursor means there was no durable history at resume time.
-        const thread = !response.materialized
-            ? {...response.thread, turns: []}
-            : response.thread.historyMode === "paginated"
-            ? {
-                ...response.thread,
-                turns: response.turnsBackwardsCursor === null
-                    ? []
-                    : await this.codexClient.threadReadHistory(response.thread.id, response.turnsBackwardsCursor),
+        let thread: Thread = {...response.thread, turns: []};
+        let history: AsyncIterable<ThreadItem[]> = noItems();
+        if (response.materialized && response.thread.historyMode === "paginated") {
+            if (response.itemsBackwardsCursor !== null) {
+                history = this.codexClient.threadItemPages(response.thread.id, {lastItemCursor: response.itemsBackwardsCursor});
             }
-            : (await this.codexClient.threadReadWithHistory(response.thread.id)).thread;
+        } else if (response.materialized) {
+            // A legacy store reads the whole history in one request.
+            const legacy = (await this.codexClient.threadReadWithHistory(response.thread.id)).thread;
+            thread = {...legacy, turns: []};
+            history = oneItemPage(legacy.turns.flatMap(turn => turn.items));
+        }
         const codexModels = await this.fetchAvailableModels();
         const currentModelId = this.createModelId(codexModels, response.model, response.reasoningEffort).toString();
         return {
             sessionId: request.sessionId,
             currentModelId: currentModelId,
             models: codexModels,
-            collaborationMode: this.getCollaborationMode(response.thread.id),
+            // Codex sends no thread/settings/updated on a resume. The response holds the mode.
+            collaborationMode: response.collaborationMode ?? this.getCollaborationMode(response.thread.id),
             modelProvider: response.modelProvider,
             currentServiceTier: response.serviceTier as ServiceTier ?? null,
             thread,
+            history,
             additionalDirectories,
             disallowedTools,
+            skippedMcpServers: sessionConfig.skippedMcpServers,
         };
     }
 
-    async readSessionThread(sessionId: string): Promise<Thread> {
-        return (await this.codexClient.threadReadWithHistory(sessionId)).thread;
+    /**
+     * The items of the turn at `index` of a session, oldest first, in pages.
+     * Returns null when the session has fewer turns.
+     */
+    async readSessionTurnItems(sessionId: string, index: number): Promise<AsyncIterable<ThreadItem[]> | null> {
+        const metadata = await this.codexClient.threadRead({threadId: sessionId});
+        if (metadata.thread.historyMode === "legacy") {
+            const legacy = await this.codexClient.threadRead({threadId: sessionId, includeTurns: true});
+            const turn = legacy.thread.turns[index];
+            return turn ? oneItemPage(turn.items) : null;
+        }
+        let first = 0;
+        const pages = this.codexClient.threadTurnPages({
+            threadId: sessionId,
+            limit: 50,
+            sortDirection: "asc",
+            itemsView: "notLoaded",
+        });
+        for await (const page of pages) {
+            const turn = page[index - first];
+            if (turn) return this.codexClient.threadItemPages(sessionId, {turnId: turn.id});
+            first += page.length;
+        }
+        return null;
     }
 
     async newSession(request: acp.NewSessionRequest): Promise<SessionMetadata> {
@@ -695,12 +775,13 @@ export class CodexAcpClient {
         const disallowedTools = readDisallowedTools(request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
+        const sessionConfig = await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers, disallowedTools);
         const response = await this.codexClient.threadStart({
             // Codex 0.153.4 supports these experimental roots (enabled at initialize).
             // Named profiles use them without flattening their filesystem rules.
             ...(additionalDirectories.length > 0
                 ? {runtimeWorkspaceRoots: [request.cwd, ...additionalDirectories]} : {}),
-            config: await this.createSessionConfig(request.cwd, additionalDirectories, request.mcpServers, disallowedTools),
+            config: sessionConfig.config,
             modelProvider: this.getModelProvider(),
             cwd: request.cwd,
         });
@@ -719,6 +800,7 @@ export class CodexAcpClient {
             currentServiceTier: response.serviceTier as ServiceTier ?? null,
             additionalDirectories,
             disallowedTools,
+            skippedMcpServers: sessionConfig.skippedMcpServers,
         };
     }
 
@@ -828,12 +910,16 @@ export class CodexAcpClient {
         await this.codexClient.runGoalClear({threadId: sessionId});
     }
 
-    async awaitMcpServerStartup(serverNames: Array<string>, afterVersion: number): Promise<McpStartupResult> {
-        return await this.codexClient.awaitMcpServerStartup(serverNames, afterVersion);
+    async awaitMcpServerStartup(
+        serverNames: Array<string>,
+        afterVersion: number,
+        options: McpServerStartupWaitOptions,
+    ): Promise<McpStartupResult> {
+        return await this.codexClient.mcpStartup.await(serverNames, afterVersion, options);
     }
 
     getMcpServerStartupVersion(): number {
-        return this.codexClient.getMcpServerStartupVersion();
+        return this.codexClient.mcpStartup.version();
     }
 
     private async createSessionConfig(
@@ -841,7 +927,7 @@ export class CodexAcpClient {
         additionalDirectories: string[],
         mcpServers: Array<McpServer>,
         disallowedTools: string[],
-    ): Promise<JsonObject> {
+    ): Promise<SessionConfig> {
         const sessionRoots = [projectPath, ...additionalDirectories];
         const activeProvider = this.gatewayConfig
             ? {
@@ -901,7 +987,7 @@ export class CodexAcpClient {
         );
         const configWithToolPolicy = applyDisallowedTools(configWithWorkspaceRoots, disallowedTools);
         if (mcpServers.length === 0) {
-            return configWithToolPolicy;
+            return {config: configWithToolPolicy, skippedMcpServers: []};
         }
 
         const requestedServers = mcpServers.map(mcp => ({
@@ -914,13 +1000,25 @@ export class CodexAcpClient {
             const existingNames = await this.getConfigMcpServerNames(projectPath);
             serversToConfigure = requestedServers.filter(mcp => !existingNames.has(mcp.name));
         }
+        const skippedMcpServers = requestedServers
+            .filter(mcp => !serversToConfigure.includes(mcp))
+            .map(mcp => mcp.name);
+        if (skippedMcpServers.length > 0) {
+            logger.log("Skipping requested MCP servers that the Codex config already defines", {
+                projectPath,
+                skippedMcpServers,
+            });
+        }
         if (serversToConfigure.length === 0) {
-            return configWithToolPolicy;
+            return {config: configWithToolPolicy, skippedMcpServers};
         }
 
         return {
-            ...configWithToolPolicy,
-            "mcp_servers": Object.fromEntries(serversToConfigure.map(mcp => [mcp.name, this.createMcpSeverConfig(mcp.server)])),
+            config: {
+                ...configWithToolPolicy,
+                "mcp_servers": Object.fromEntries(serversToConfigure.map(mcp => [mcp.name, this.createMcpSeverConfig(mcp.server)])),
+            },
+            skippedMcpServers,
         };
     }
 
@@ -956,15 +1054,12 @@ export class CodexAcpClient {
             return;
         }
 
+        // Codex reads the skill files again for each turn by itself, so only a change of the roots needs a request.
         const skillExtraRoots = additionalRoots.map(root => path.join(root, ".agents", "skills"));
         if (!arraysEqual(this.skillExtraRoots, skillExtraRoots)) {
             await this.codexClient.skillsExtraRootsSet({ extraRoots: skillExtraRoots });
             this.skillExtraRoots = skillExtraRoots;
         }
-        await this.codexClient.listSkills({
-            cwds: [cwd, ...additionalRoots],
-            forceReload: true,
-        });
     }
 
     /**
@@ -1189,8 +1284,13 @@ export class CodexAcpClient {
         });
     }
 
-    async listMcpServers(): Promise<ListMcpServerStatusResponse> {
-        return this.codexClient.listMcpServerStatus({});
+    async listMcpServers(params: ListMcpServerStatusParams): Promise<ListMcpServerStatusResponse> {
+        return this.codexClient.listMcpServerStatus(params);
+    }
+
+    /** Reloads the MCP configuration. Codex reconnects the servers of every loaded thread that failed, closed, or changed. */
+    async reloadMcpServers(): Promise<void> {
+        await this.codexClient.mcpServerReload();
     }
 
     async mcpServerOauthLogin(
@@ -1202,8 +1302,9 @@ export class CodexAcpClient {
     async awaitMcpServerOauthLoginCompleted(
         name: string,
         threadId: string,
+        signal?: AbortSignal,
     ): Promise<McpServerOauthLoginCompletedNotification> {
-        return await this.codexClient.awaitMcpServerOauthLoginCompleted(name, threadId);
+        return await this.codexClient.mcpOauthCompletions.await(name, threadId, signal);
     }
 
     async listSessions(request: acp.ListSessionsRequest): Promise<acp.ListSessionsResponse> {
@@ -1225,23 +1326,21 @@ export class CodexAcpClient {
 
         const preferredProvider = this.getModelProvider();
         const modelProviders = preferredProvider ? [preferredProvider] : [];
+        // The state DB answers in milliseconds. Without the flag, Codex scans and repairs every rollout file on
+        // each call, which took about 4 s per page.
         const listResponse = await this.codexClient.threadList({
             cursor: request.cursor ?? null,
             modelProviders: modelProviders,
             sourceKinds: sourceKinds,
+            useStateDbOnly: true,
         });
 
         const mapThreadToSession = (thread: Thread) => ({
             sessionId: thread.id,
             cwd: thread.cwd,
-            title: (thread.name ?? thread.preview) || null,
+            title: normalizeSessionTitle(thread.name ?? thread.preview),
             updatedAt: new Date(thread.updatedAt * 1000).toISOString(),
         });
-
-        if (listResponse.data.length === 0) {
-            const diagnostics = await this.runSessionListDiagnostics();
-            logger.log("Session list diagnostics", diagnostics);
-        }
 
         let sessions = listResponse.data.map(mapThreadToSession);
         if (requestedCwd) {
@@ -1289,32 +1388,14 @@ export class CodexAcpClient {
         return models;
     }
 
-    private async runSessionListDiagnostics(): Promise<Record<string, unknown>> {
-        const [allProviders, archivedAllProviders, customGateway] = await Promise.all([
-            this.codexClient.threadList({}),
-            this.codexClient.threadList({archived: true}),
-            this.codexClient.threadList({modelProviders: [CUSTOM_GATEWAY_PROVIDER_ID]}),
-        ]);
-
-        return {
-            allProviders: {
-                count: allProviders.data.length,
-                nextCursor: allProviders.nextCursor ?? null,
-            },
-            archivedAllProviders: {
-                count: archivedAllProviders.data.length,
-                nextCursor: archivedAllProviders.nextCursor ?? null,
-            },
-            customGateway: {
-                count: customGateway.data.length,
-                nextCursor: customGateway.nextCursor ?? null,
-            },
-        };
-    }
-
 }
 
 export type JsonObject = { [key in string]?: JsonValue }
+
+export type SessionConfig = {
+    config: JsonObject,
+    skippedMcpServers: string[],
+}
 
 function buildPromptItems(prompt: acp.ContentBlock[]): UserInput[] {
     return prompt.map((block): UserInput | null => {
@@ -1520,4 +1601,10 @@ function mergeGatewayConfig(config: JsonObject, gatewayConfig: GatewayConfig | n
     } else {
         return config;
     }
+}
+
+async function* noItems(): AsyncGenerator<ThreadItem[]> {}
+
+async function* oneItemPage(items: ThreadItem[]): AsyncGenerator<ThreadItem[]> {
+    if (items.length > 0) yield items;
 }

@@ -346,7 +346,7 @@ describe("session compaction", () => {
         const client = fixture.getCodexAcpClient();
         const appServer = fixture.getCodexAppServerClient();
         const model = createTestModel();
-        vi.spyOn(client, "authRequired").mockResolvedValue(false);
+        vi.spyOn(client, "readAuthRequirement").mockResolvedValue({required: false, account: null});
         vi.spyOn(client, "getAccount").mockResolvedValue({account: null, requiresOpenaiAuth: false});
         vi.spyOn(client, "listSkills").mockResolvedValue({data: []});
         vi.spyOn(appServer, "listModels").mockResolvedValue({data: [model], nextCursor: null});
@@ -443,10 +443,17 @@ async function createFixture(clientCapabilities: acp.ClientCapabilities = compac
             sessionId,
             true,
             new ACPSessionConnection(fixture.getAcpConnection(), sessionId),
+            () => {},
         );
     }
     vi.spyOn(agent, "getSessionState").mockReturnValue(sessionState);
-    await agent.initialize({protocolVersion: 1, clientCapabilities});
+    // The test session state renders for AIR, so the client declares AIR too.
+    await agent.initialize({
+        protocolVersion: 1,
+        clientCapabilities: clientCapabilities._meta == null
+            ? {...clientCapabilities, _meta: {jetbrains: {air: {version: 1, capabilities: []}}}}
+            : clientCapabilities,
+    });
     await agent.prompt({sessionId, prompt: [{type: "text", text: "Continue."}]});
     fixture.clearAcpConnectionDump();
     return fixture;

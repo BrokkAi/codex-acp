@@ -14,8 +14,7 @@ async function fixtureForGoal() {
     const agent = fixture.getCodexAcpAgent();
     const client = fixture.getCodexAcpClient();
     const app = fixture.getCodexAppServerClient();
-    vi.spyOn(client, "authRequired").mockResolvedValue(false);
-    vi.spyOn(client, "getAccount").mockResolvedValue({account: null, requiresOpenaiAuth: false});
+    vi.spyOn(app, "accountRead").mockResolvedValue({account: null, requiresOpenaiAuth: false});
     vi.spyOn(client, "listSkills").mockResolvedValue({data: []});
     vi.spyOn(app, "listModels").mockResolvedValue({data: [createTestModel()], nextCursor: null});
     const goal = {value: {...storedGoal}};

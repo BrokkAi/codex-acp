@@ -7,8 +7,8 @@ function fixture() {
     vi.spyOn(native, "configRead").mockResolvedValue({config: {}} as never);
     vi.spyOn(native, "listSkills").mockResolvedValue({data: []});
     vi.spyOn(native, "listModels").mockResolvedValue({data: [createTestModel({id: "gpt-5"})], nextCursor: null});
-    const response = {thread: {id: "thread-id"}, model: "gpt-5", reasoningEffort: "medium", materialized: false};
-    vi.spyOn(native, "threadReadWithHistory").mockResolvedValue({thread: {id: "thread-id"}} as never);
+    const response = {thread: {id: "thread-id", turns: [], historyMode: "legacy"}, model: "gpt-5", reasoningEffort: "medium", materialized: false};
+    vi.spyOn(native, "threadReadWithHistory").mockResolvedValue({thread: {id: "thread-id", turns: [], historyMode: "legacy"}} as never);
     const start = vi.spyOn(native, "threadStart").mockResolvedValue(response as never);
     const resume = vi.spyOn(native, "threadResume").mockResolvedValue(response as never);
     const fork = vi.spyOn(native, "threadFork").mockResolvedValue(response as never);

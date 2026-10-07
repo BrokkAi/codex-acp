@@ -67,22 +67,31 @@ describe('CodexACPAgent - initialize', () => {
             },
             authMethods: getCodexAuthMethods(),
             _meta: {
-                execution: {version: 1},
                 steering: {
                     supported: true,
-                    idleBehaviors: ["promptRequired"],
                 },
-                goal: {
+            },
+        });
+    });
+
+    it('should advertise the AIR extension only to AIR', async () => {
+        const result = await agent.initialize({
+            protocolVersion: acp.PROTOCOL_VERSION,
+            clientCapabilities: {_meta: {jetbrains: {air: {version: 1, capabilities: []}}}},
+        });
+        expect(result._meta).toEqual({
+            steering: {
+                supported: true,
+            },
+            jetbrains: {
+                air: {
                     version: 1,
-                    controlMethod: "_session/goal",
-                    actions: ["set", "pause", "resume", "clear"],
-                    resumePolicies: ["preserve", "pause"],
-                },
-                jetbrains: {
-                    air: {
+                    goal: {
                         version: 1,
-                        capabilities: ["sessionFailure", "agentFileChangeReport", "nativeSubagentSessions", "asyncTasks", "recommendedValue"],
+                        controlMethod: "_session/goal",
+                        actions: ["set", "pause", "resume", "clear"],
                     },
+                    capabilities: ["sessionFailure", "diffPatch", "agentFileChangeReport", "nativeSubagentSessions", "asyncTasks", "recommendedValue", "rawInputRendering", "planContentDelta"],
                 },
             },
         });
