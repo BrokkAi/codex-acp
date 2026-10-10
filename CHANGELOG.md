@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.7
+
+Keep DeepSeek mailbox context after complete tool call/result batches in Mjolnir Guardian and yolo modes. An adapter-owned HTTP forwarder preserves real outputs, parallel batches, reasoning, authentication and streaming while stock Codex remains pinned at 0.160.1.
+
 ## 1.13.6
 
 Show asynchronous Codex question and attention messages that arrive without streamed text. Keep question forms available after a turn ends, support suggested and custom answers, and deliver answers through Codex's atomic start-or-steer operation. Report delivery failures visibly. Merge upstream 2.1.1 and pin Codex 0.160.1 while preserving Mjolnir guardian grants, execution and goal recovery, tool restrictions, and owned subagent cancellation.

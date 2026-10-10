@@ -179,3 +179,20 @@ new, load, resume, fork, and provider restart. Invalid values are rejected.
 Clients should attach it only to registrations they intend to pre-approve;
 server names alone do not imply trust. Mjolnir sends `approve` for its owned
 servers in Guardian mode and leaves yolo registrations unchanged.
+
+### DeepSeek tool history compatibility
+
+In Mjolnir guardian and yolo modes, direct `api.deepseek.com` Responses
+providers use an adapter-owned loopback forwarder. It moves PostToolUse
+developer context after the complete tool call/result batch before forwarding
+the request, preserving actual outputs, parallel batches, reasoning items,
+authentication, and streamed responses. Complete requests retain their original
+body bytes. Incomplete or unfamiliar batches pass through unchanged; the bridge
+never fabricates a result or reruns a tool. Stock Codex remains the pinned
+upstream package. This works around [openai/codex#46193](https://github.com/openai/codex/issues/46193).
+
+The forwarder is created for new, resumed, loaded, and forked sessions, closes
+with their app-server connection, and keeps mailbox delivery enabled. Other
+providers and ACP modes retain their existing routing. DeepSeek uses HTTP/SSE
+through this forwarder; WebSocket transport is disabled for that provider only.
+No separate service or persistent provider configuration changes are needed.

@@ -28,6 +28,7 @@ import {ModelId} from "./ModelId";
 import {AgentMode} from "./AgentMode";
 import path from "node:path";
 import {logger} from "./Logger";
+import {DeepSeekProviderRouting} from "./DeepSeekToolHistoryProxy";
 import {isAccountReadAuthFailureError, isAccountReadUnavailableError} from "./CodexThreadErrors";
 import {sanitizeMcpServerName} from "./McpServerName";
 import {normalizeSessionTitle} from "./SessionTitle";
@@ -151,6 +152,7 @@ export class CodexAcpClient {
     private readonly subagents: CodexSubagentSubscriptions;
     private skillExtraRoots: string[] = [];
     private configPath: string | null = null;
+    private readonly deepSeekRouting = new DeepSeekProviderRouting();
 
 
     constructor(codexClient: CodexAppServerClient, codexConfig?: JsonObject, modelProvider?: string) {
@@ -160,6 +162,7 @@ export class CodexAcpClient {
         this.gatewayConfig = null;
         this.gatewayConfigSource = null;
         this.subagents = new CodexSubagentSubscriptions(codexClient);
+        this.codexClient.onConnectionClosed(() => this.deepSeekRouting.close());
     }
 
     get appServerClient(): CodexAppServerClient {
@@ -949,7 +952,7 @@ export class CodexAcpClient {
             }])),
         };
         const initialMode = AgentMode.getInitialAgentMode();
-        const effectiveConfig: JsonObject = initialMode === AgentMode.Agent || additionalDirectories.length > 0
+        const effectiveConfig: JsonObject = initialMode === AgentMode.Agent || initialMode === AgentMode.AgentFullAccess || additionalDirectories.length > 0
             ? (await this.codexClient.configRead({includeLayers: false, cwd: projectPath})).config
             : {};
         const profile = mergedConfig["default_permissions"] ?? effectiveConfig["default_permissions"];
@@ -985,7 +988,10 @@ export class CodexAcpClient {
             } : modeConfig,
             additionalDirectories,
         );
-        const configWithToolPolicy = applyDisallowedTools(configWithWorkspaceRoots, disallowedTools);
+        const configWithRouting = initialMode === AgentMode.Agent || initialMode === AgentMode.AgentFullAccess
+            ? await this.deepSeekRouting.configForSession(configWithWorkspaceRoots, effectiveConfig, this.getModelProvider())
+            : configWithWorkspaceRoots;
+        const configWithToolPolicy = applyDisallowedTools(configWithRouting, disallowedTools);
         if (mcpServers.length === 0) {
             return {config: configWithToolPolicy, skippedMcpServers: []};
         }

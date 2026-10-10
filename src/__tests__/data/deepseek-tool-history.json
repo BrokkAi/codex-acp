@@ -1,0 +1,220 @@
+[
+  [
+    {
+      "content": [
+        {
+          "text": "reasoning is preserved",
+          "type": "reasoning_text",
+        },
+      ],
+      "type": "reasoning",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "A",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "call_id": "A",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+  ],
+  [
+    {
+      "content": [
+        {
+          "text": "reasoning is preserved",
+          "type": "reasoning_text",
+        },
+      ],
+      "type": "reasoning",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "A",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "B",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "call_id": "B",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "call_id": "A",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+  ],
+  [
+    {
+      "content": [
+        {
+          "text": "reasoning is preserved",
+          "type": "reasoning_text",
+        },
+      ],
+      "type": "reasoning",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "A",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "B",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "call_id": "A",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "call_id": "B",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+  ],
+  [
+    {
+      "content": [
+        {
+          "text": "reasoning is preserved",
+          "type": "reasoning_text",
+        },
+      ],
+      "type": "reasoning",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "A",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "call_id": "A",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+    {
+      "content": [
+        {
+          "text": "reasoning is preserved",
+          "type": "reasoning_text",
+        },
+      ],
+      "type": "reasoning",
+    },
+    {
+      "arguments": "{"cmd":"actual command"}",
+      "call_id": "B",
+      "name": "exec_command",
+      "type": "function_call",
+    },
+    {
+      "call_id": "B",
+      "output": "actual result",
+      "type": "function_call_output",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+  ],
+  [
+    {
+      "call_id": "patch",
+      "input": "patch",
+      "name": "apply_patch",
+      "type": "custom_tool_call",
+    },
+    {
+      "call_id": "patch",
+      "output": [
+        {
+          "text": "patched",
+          "type": "input_text",
+        },
+      ],
+      "type": "custom_tool_call_output",
+    },
+    {
+      "content": [
+        {
+          "text": "new supervisor instruction",
+          "type": "input_text",
+        },
+      ],
+      "role": "developer",
+      "type": "message",
+    },
+  ],
+]

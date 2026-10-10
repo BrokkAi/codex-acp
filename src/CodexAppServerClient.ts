@@ -838,6 +838,11 @@ export class CodexAppServerClient {
         this.notificationHandlers.set(sessionId, callback);
     }
 
+    onConnectionClosed(callback: () => void): void {
+        this.connection.onClose?.(callback);
+        this.connection.onDispose?.(callback);
+    }
+
     private codexEventHandlers: Array<(event: CodexConnectionEvent) => void> = [];
     onClientTransportEvent(callback: (event: CodexConnectionEvent) => void){
         this.codexEventHandlers.push(callback);
