@@ -170,7 +170,11 @@ import {
     clientSupportsSubagents,
     type SubagentAwareSessionCapabilities,
 } from "./subagents/AcpSubagents";
-import {CodexSubagentEventRouter} from "./subagents/CodexSubagentEventRouter";
+import {
+    CodexSubagentEventRouter,
+    reportSubagentModel,
+    type SubagentModels,
+} from "./subagents/CodexSubagentEventRouter";
 import {nameFromAgentPath} from "./subagents/CodexAgentPath";
 import {listCodexHooks, trustCodexHooks, type CodexHookIdentity} from "./CodexHookTrust";
 import type {HooksListEntry} from "./app-server/v2/HooksListEntry";
@@ -1213,6 +1217,7 @@ export class CodexAcpServer {
                 clientSupportsSubagents(this.clientCapabilities),
                 new ACPSessionConnection(this.connection, sessionId),
                 childSessionId => this.reportingConnection.reports.releaseOpen(childSessionId),
+                () => this.subagentModels(sessionState),
             ),
             asyncTasks: this.createAsyncTasks(sessionId),
             compactions: new CodexSessionCompactions(),
@@ -3122,6 +3127,19 @@ export class CodexAcpServer {
         await new ACPSessionConnection(this.connection, sessionState.sessionId).update(update);
     }
 
+    /** The models of a root session, for the configuration of its native subagent sessions. */
+    private subagentModels(sessionState: SessionState): SubagentModels | null {
+        if (!this.isSessionConfigEnabled()) return null;
+        let currentModel: string | null = null;
+        try {
+            currentModel = ModelId.fromString(sessionState.currentModelId).model;
+        }
+        catch {
+            // A session without a known model gives no current entry to match.
+        }
+        return {currentModel, availableModels: sessionState.availableModels};
+    }
+
     private findCurrentModel(models: Model[], currentModelId: string): Model | undefined {
         const modelId = ModelId.fromString(currentModelId);
         return models.find(m => m.id === modelId.model);
@@ -3271,6 +3289,7 @@ export class CodexAcpServer {
                 clientSupportsSubagents(this.clientCapabilities),
                 new ACPSessionConnection(this.connection, sessionId),
                 childSessionId => this.reportingConnection.reports.releaseOpen(childSessionId),
+                () => this.subagentModels(sessionState),
             ),
             asyncTasks: this.createAsyncTasks(sessionId),
             compactions: new CodexSessionCompactions(),
@@ -3404,7 +3423,11 @@ export class CodexAcpServer {
         isOpen: () => boolean,
     ): Promise<void> {
         const session = new ACPSessionConnection(this.connection, sessionId);
-        const announced = new Map<string, {generation: number; sessionId: string; terminal: boolean}>();
+        const announced = new Map<string, {generation: number; sessionId: string; terminal: boolean; model?: string}>();
+        // Sends the model of a replayed child after its announcement, as the live session does. Replay sends only
+        // the resolved model that the activity items name for the child, so an older record gets no model option.
+        const reportModel = (childSessionId: string, model: string | undefined) =>
+            reportSubagentModel(session, childSessionId, this.subagentModels(sessionState), model);
         // v2 only (this path also serves v1's native replay, unchanged there).
         const startedReplayMessages = new Set<string>();
         for await (const items of itemPages) {
@@ -3436,6 +3459,7 @@ export class CodexAcpServer {
                         // An interaction that started no child turn is not a new generation.
                         if (activityKind === "interacted" && !childItems) continue;
                         const name = nameFromAgentPath(item.agentPath, `Agent ${item.agentThreadId.slice(-8)}`);
+                        const model = item.model || previous?.model;
                         await session.update({
                             sessionUpdate: "subagent_spawned",
                             subagentSessionId: childSessionId,
@@ -3443,7 +3467,13 @@ export class CodexAcpServer {
                             task: `Delegated task for ${name}`,
                             capabilities: {},
                         });
-                        announced.set(item.agentThreadId, {generation, sessionId: childSessionId, terminal: false});
+                        announced.set(item.agentThreadId, {
+                            generation,
+                            sessionId: childSessionId,
+                            terminal: false,
+                            ...(model ? {model} : {}),
+                        });
+                        await reportModel(childSessionId, model);
                         if (childItems) {
                             const commandIds = new Set<string>();
                             try {
@@ -3477,6 +3507,7 @@ export class CodexAcpServer {
                         const child = announced.get(item.agentThreadId);
                         if (!child) {
                             const name = nameFromAgentPath(item.agentPath, `Agent ${item.agentThreadId.slice(-8)}`);
+                            const model = item.model || undefined;
                             await session.update({
                                 sessionUpdate: "subagent_spawned",
                                 subagentSessionId: item.agentThreadId,
@@ -3488,7 +3519,9 @@ export class CodexAcpServer {
                                 generation: 1,
                                 sessionId: item.agentThreadId,
                                 terminal: false,
+                                ...(model ? {model} : {}),
                             });
+                            await reportModel(item.agentThreadId, model);
                             continue;
                         }
                         if (child.terminal) continue;
