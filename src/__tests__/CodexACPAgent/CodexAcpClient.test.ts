@@ -3355,6 +3355,41 @@ describe('ACP server test', { timeout: 40_000 }, () => {
         ]));
     });
 
+    it('does not publish a resume snapshot superseded by clear', async () => {
+        const {mockFixture, sessionState} = setupPromptFixture();
+        // @ts-expect-error - registering local session state for the extension request path
+        mockFixture.getCodexAcpAgent().sessions.set("session-id", sessionState);
+        const resumedTurn = deferred<TurnCompletedNotification | null>();
+        const resumeGoalSpy = vi.spyOn(mockFixture.getCodexAcpClient(), "resumeGoal")
+            .mockImplementation(async (_sessionId, _onTurnStarted, onGoalSet) => {
+                const result = await resumedTurn.promise;
+                onGoalSet?.(createThreadGoal({status: "active"}));
+                return result;
+            });
+        vi.spyOn(mockFixture.getCodexAcpClient(), "clearGoal").mockResolvedValue(undefined);
+        mockFixture.clearAcpConnectionDump();
+
+        const resume = mockFixture.getCodexAcpAgent().extMethod(GOAL_CONTROL_METHOD, {
+            sessionId: "session-id",
+            action: "resume",
+        });
+        await vi.waitFor(() => expect(resumeGoalSpy).toHaveBeenCalled());
+        await expect(mockFixture.getCodexAcpAgent().extMethod(GOAL_CONTROL_METHOD, {
+            sessionId: "session-id",
+            action: "clear",
+        })).resolves.toEqual({});
+        resumedTurn.resolve(null);
+        await expect(resume).resolves.toEqual({});
+
+        const goalUpdates = mockFixture.getAcpConnectionEvents([]).filter(event =>
+            event.method === "sessionUpdate"
+            && event.args[0]?.update?.sessionUpdate === "session_info_update"
+        );
+        expect(goalUpdates).toHaveLength(1);
+        expect(goalUpdates[0]?.args[0]?.update?._meta).toEqual({jetbrains: {air: {version: 1, goal: null}}});
+        expect(sessionState.currentGoal).toBeNull();
+    });
+
     it('does not start a continuation turn when goal set routes no app-server turn', async () => {
         const {mockFixture, sessionState, turnStartSpy} = setupPromptFixture();
         // @ts-expect-error - registering local session state for the extension request path
@@ -3756,6 +3791,56 @@ describe('ACP server test', { timeout: 40_000 }, () => {
             status: "active",
         }, expect.any(Function));
         expect(turnStartSpy).not.toHaveBeenCalled();
+        expect(mockFixture.getAcpConnectionEvents([]).filter(event =>
+            event.method === "sessionUpdate"
+            && event.args[0]?.update?.sessionUpdate === "agent_message_chunk"
+        ).map(event => event.args[0]?.update?.content?.text)).toEqual(["Goal set."]);
+    });
+
+    it('answers every /goal action that does not route a turn', async () => {
+        const {mockFixture} = setupPromptFixture();
+        vi.spyOn(mockFixture.getCodexAppServerClient(), "runGoalSet").mockResolvedValue(null);
+        vi.spyOn(mockFixture.getCodexAcpClient(), "resumeGoal").mockResolvedValue(null);
+        vi.spyOn(mockFixture.getCodexAcpClient(), "setGoalStatus").mockResolvedValue(
+            createThreadGoal({status: "paused"}),
+        );
+        vi.spyOn(mockFixture.getCodexAcpClient(), "clearGoal").mockResolvedValue(undefined);
+
+        for (const [command, expected] of [
+            ["/goal resume", "Goal resumed."],
+            ["/goal pause", "Goal paused."],
+            ["/goal clear", "Goal cleared."],
+        ] as const) {
+            mockFixture.clearAcpConnectionDump();
+            await mockFixture.getCodexAcpAgent().prompt({
+                sessionId: "session-id",
+                prompt: [{type: "text", text: command}],
+            });
+            const messages = mockFixture.getAcpConnectionEvents([]).filter(event =>
+                event.method === "sessionUpdate"
+                && event.args[0]?.update?.sessionUpdate === "agent_message_chunk"
+            );
+            expect(messages.map(event => event.args[0]?.update?.content?.text)).toEqual([expected]);
+            expect(mockFixture.getAcpConnectionDump([])).not.toContain("Continue working toward the active goal.");
+        }
+    });
+
+    it('does not add a /goal message when the goal turn was observed', async () => {
+        const {mockFixture} = setupPromptFixture();
+        vi.spyOn(mockFixture.getCodexAppServerClient(), "runGoalSet").mockResolvedValue({
+            threadId: "session-id",
+            turn: createTurn("goal-turn", "completed"),
+        });
+
+        await mockFixture.getCodexAcpAgent().prompt({
+            sessionId: "session-id",
+            prompt: [{type: "text", text: "/goal Ship the migration"}],
+        });
+
+        expect(mockFixture.getAcpConnectionEvents([]).filter(event =>
+            event.method === "sessionUpdate"
+            && event.args[0]?.update?.sessionUpdate === "agent_message_chunk"
+        )).toHaveLength(0);
     });
 
     it('reports missing goal slash command input', async () => {

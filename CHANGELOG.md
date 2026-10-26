@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.1
+
+Always answer handled `/goal` commands when Codex does not route a turn, and ignore goal-control snapshots superseded by a newer action.
+
 ## 1.14.0
 
 Merge upstream through 2.3.1-preview.6, adopt ACP SDK 2.0.2 and pin Codex 0.164.0. Add ACP v2 alongside the existing v1 connection, standard live and replayed subagent conversations with owned cancellation, append-mode client system prompts, hook trust, richer session lists, provider model filtering, and app-server recovery. Preserve Mjolnir guardian workspace grants, tool restrictions, goal and execution metadata, usage coverage, asynchronous questions, DeepSeek tool ordering, explicit MCP approval policies, and idle-steer return behavior.

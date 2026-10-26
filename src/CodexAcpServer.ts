@@ -1022,7 +1022,8 @@ export class CodexAcpServer {
                         }
                     }
                     const goal = await this.runWithProcessCheck(() => this.codexAcpClient.setGoalStatus(sessionState.sessionId, "paused"));
-                    if (this.sessionPublishIsCurrent(sessionState, sessionGeneration)) {
+                    if (this.sessionPublishIsCurrent(sessionState, sessionGeneration)
+                        && this.goalControlGenerations.get(sessionState.sessionId) === goalControlGeneration) {
                         await this.publishGoalSnapshot(sessionState, toThreadGoalSnapshot(goal), false);
                     }
                 } else if (methodRequest.params.action === "resume") {
@@ -1051,12 +1052,15 @@ export class CodexAcpServer {
                             updatedGoal = goal;
                         },
                     ));
-                    if (updatedGoal !== null && this.sessionPublishIsCurrent(sessionState, sessionGeneration)) {
+                    if (updatedGoal !== null
+                        && this.sessionPublishIsCurrent(sessionState, sessionGeneration)
+                        && this.goalControlGenerations.get(sessionState.sessionId) === goalControlGeneration) {
                         await this.publishGoalSnapshot(sessionState, toThreadGoalSnapshot(updatedGoal), false);
                     }
                 } else if (methodRequest.params.action === "clear") {
                     await this.runWithProcessCheck(() => this.codexAcpClient.clearGoal(sessionState.sessionId));
-                    if (this.sessionPublishIsCurrent(sessionState, sessionGeneration)) {
+                    if (this.sessionPublishIsCurrent(sessionState, sessionGeneration)
+                        && this.goalControlGenerations.get(sessionState.sessionId) === goalControlGeneration) {
                         await this.publishGoalSnapshot(sessionState, null, false);
                     }
                 }

@@ -25,6 +25,16 @@
   },
   {
     "sessionUpdate": {
+      "messageId": "<goalMessageId>",
+      "content": {
+        "text": "Goal resumed.",
+        "type": "text"
+      },
+      "sessionUpdate": "agent_message_chunk"
+    }
+  },
+  {
+    "sessionUpdate": {
       "stopReason": "end_turn",
       "_meta": {
         "quota": {

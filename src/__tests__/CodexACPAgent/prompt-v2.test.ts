@@ -878,7 +878,15 @@ describe('session/prompt over ACP v2', () => {
 
         expect(client.turnStartParams).toEqual([]);
         expect(stateUpdates(client.transcript)).toEqual([{state: "running"}, {state: "idle", stopReason: "end_turn"}]);
-        await expect(dump(client.transcript, messageId)).toMatchFileSnapshot('data/prompt-v2-goal-resume-no-continuation.json');
+        const reply = client.transcript.find(entry =>
+            "sessionUpdate" in entry && entry.sessionUpdate.sessionUpdate === "agent_message_chunk"
+        );
+        const replyMessageId = reply && "sessionUpdate" in reply && "messageId" in reply.sessionUpdate
+            ? reply.sessionUpdate.messageId
+            : null;
+        expect(replyMessageId).not.toBeNull();
+        await expect(dump(client.transcript, messageId).replaceAll(String(replyMessageId), "<goalMessageId>"))
+            .toMatchFileSnapshot('data/prompt-v2-goal-resume-no-continuation.json');
     }, 10000);
 
     it('shows the plan-implementation follow-up turn as its own live user message, with its own minted id', async () => {

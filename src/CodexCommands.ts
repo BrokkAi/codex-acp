@@ -504,10 +504,11 @@ export class CodexCommands {
         switch (argument.toLowerCase()) {
             case "pause":
                 await this.runWithProcessCheck(() => this.codexAcpClient.setGoalStatus(sessionId, "paused"));
+                await this.sendGoalCommandMessage(sessionId, "Goal paused.");
                 return { handled: true };
             case "resume":
                 options.onTurnStartPending?.();
-                return this.createGoalCommandResult(await this.runWithProcessCheck(() => this.codexAcpClient.resumeGoal(
+                return this.createGoalCommandResult(sessionId, "Goal resumed.", await this.runWithProcessCheck(() => this.codexAcpClient.resumeGoal(
                     sessionId,
                     (turnId) => {
                         this.handleCommandTurnStarted(sessionState, options, turnId, sessionId);
@@ -517,6 +518,7 @@ export class CodexCommands {
                 )));
             case "clear":
                 await this.runWithProcessCheck(() => this.codexAcpClient.clearGoal(sessionId));
+                await this.sendGoalCommandMessage(sessionId, "Goal cleared.");
                 return { handled: true };
         }
 
@@ -527,7 +529,7 @@ export class CodexCommands {
         }
 
         options.onTurnStartPending?.();
-        return this.createGoalCommandResult(await this.runWithProcessCheck(() => this.codexAcpClient.setGoal(
+        return this.createGoalCommandResult(sessionId, "Goal set.", await this.runWithProcessCheck(() => this.codexAcpClient.setGoal(
             sessionId,
             argument,
             (turnId) => {
@@ -551,17 +553,27 @@ export class CodexCommands {
         }
     }
 
-    private createGoalCommandResult(turnCompleted: TurnCompletedNotification | null): CommandHandleResult {
+    private async createGoalCommandResult(
+        sessionId: string,
+        message: string,
+        turnCompleted: TurnCompletedNotification | null,
+    ): Promise<CommandHandleResult> {
         // No matching turn observed within `runGoalSet`'s 1 s grace window. Codex auto-continues
         // active goals itself; don't start a synthetic continuation turn here (that also skipped
         // the goal-status check, so it fired even when the goal had stopped, e.g. budgetLimited).
         if (turnCompleted === null) {
+            await this.sendGoalCommandMessage(sessionId, message);
             return { handled: true };
         }
         return {
             handled: true,
             turnCompleted,
         };
+    }
+
+    private async sendGoalCommandMessage(sessionId: string, message: string): Promise<void> {
+        const session = new ACPSessionConnection(this.connection, sessionId);
+        await session.update(createAgentTextMessageChunk(message));
     }
 
     private buildReviewTarget(instructions: string): ReviewTarget {
