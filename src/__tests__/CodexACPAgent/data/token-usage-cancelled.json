@@ -3,9 +3,9 @@
   "usage": {
     "totalTokens": 3000,
     "inputTokens": 2500,
-    "outputTokens": 500,
     "cachedReadTokens": 0,
     "cachedWriteTokens": 0,
+    "outputTokens": 500,
     "thoughtTokens": 0,
     "_meta": {
       "mjolnir.dev/usage-scope": "turn"
@@ -14,20 +14,22 @@
   "_meta": {
     "quota": {
       "token_count": {
-        "totalTokens": 1500,
-        "inputTokens": 1200,
+        "totalTokens": 3000,
+        "inputTokens": 2500,
         "cachedInputTokens": 0,
-        "outputTokens": 300,
+        "cacheWriteInputTokens": 0,
+        "outputTokens": 500,
         "reasoningOutputTokens": 0
       },
       "model_usage": [
         {
           "model": "model-id",
           "token_count": {
-            "totalTokens": 1500,
-            "inputTokens": 1200,
+            "totalTokens": 3000,
+            "inputTokens": 2500,
             "cachedInputTokens": 0,
-            "outputTokens": 300,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 500,
             "reasoningOutputTokens": 0
           }
         }

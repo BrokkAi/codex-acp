@@ -2,7 +2,7 @@
 
 # ACP adapter for Codex CLI
 
-[![npm version](https://img.shields.io/npm/v/%40agentclientprotocol%2Fcodex-acp)](https://www.npmjs.com/package/@agentclientprotocol/codex-acp)
+[![npm version](https://img.shields.io/npm/v/%40brokkai%2Fcodex-acp)](https://www.npmjs.com/package/@brokkai/codex-acp)
 
 Use [OpenAI Codex](https://github.com/openai/codex) from [Agent Client Protocol](https://agentclientprotocol.com/) clients.
 
@@ -37,7 +37,7 @@ npx -y @brokkai/codex-acp
 Or install it globally:
 
 ```bash
-npm install -g @agentclientprotocol/codex-acp
+npm install -g @brokkai/codex-acp
 codex-acp --version
 ```
 
@@ -47,15 +47,7 @@ The npm package includes a compatible `@openai/codex` dependency. Set `CODEX_PAT
 CODEX_PATH=/path/to/codex npx -y @brokkai/codex-acp
 ```
 
-To try changes that have landed on `main` but are not released yet, install from the
-`preview` channel. Pushes to `main` trigger preview publishing without waiting
-for CI or release-please; release commits are excluded, and newer pushes can
-replace queued previews. See
-[docs/RELEASES.md](docs/RELEASES.md#preview-releases).
-
-```bash
-npx -y @brokkai/codex-acp@preview
-```
+BrokkAi releases are published from version tags after verification. See [docs/RELEASES.md](docs/RELEASES.md) for the release process.
 
 ## Authentication
 

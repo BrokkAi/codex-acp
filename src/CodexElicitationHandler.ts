@@ -1,4 +1,4 @@
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import type { ElicitationHandler } from "./CodexAppServerClient";
 import type { ServerNotification } from "./app-server";
 import type {JsonValue} from "./app-server/serde_json/JsonValue";
@@ -27,6 +27,7 @@ import {
 } from "./permissions/mcp";
 import type {PermissionPromptContext} from "./permissions/lifecycle";
 import {AcpToolCallRenderer} from "./tool-calls/AcpToolCallRenderer";
+import {subagentInteractionSignal, subagentToolCallId, withSubagentUserAction} from "./subagents/SubagentInteraction";
 import {ElicitationReporter} from "./tool-calls/reporters/ElicitationReporter";
 import {isRecord, normalizeJsonObject, normalizeJsonValue, recordOrNull} from "./permissions/json";
 import {AIR_CUSTOM_ANSWER_KEY, LEGACY_AIR_CUSTOM_ANSWER_KEY, isAirClient, withAirMeta} from "./AirExtension";
@@ -157,7 +158,7 @@ export class CodexElicitationHandler implements ElicitationHandler {
     private readonly renderer: AcpToolCallRenderer;
     private readonly permissionContext: PermissionPromptContext;
     private readonly clientCapabilities: acp.ClientCapabilities | null;
-    private cancellationSignal: AbortSignal | undefined;
+    private readonly cancellationSignal: AbortSignal | undefined;
     // In Rust, the MCP elicitation handler receives ElicitationRequestEvent directly from the MCP
     // protocol layer, where id is set to "mcp_tool_call_approval_<call_id>" — the call ID is extracted
     // by stripping that prefix.
@@ -189,8 +190,6 @@ export class CodexElicitationHandler implements ElicitationHandler {
         this.cancellationSignal = cancellationSignal;
     }
 
-    setCancellationSignal(signal: AbortSignal): void { this.cancellationSignal = signal; }
-
     async handleNotification(notification: ServerNotification): Promise<void> {
         switch (notification.method) {
             case "serverRequest/resolved":
@@ -204,14 +203,15 @@ export class CodexElicitationHandler implements ElicitationHandler {
     async handleElicitation(
         params: McpServerElicitationRequestParams
     ): Promise<McpServerElicitationRequestResponse> {
+        const signal = subagentInteractionSignal(params.threadId, this.cancellationSignal);
         try {
             const context = this.createMcpElicitationContext(params);
             if (this.shouldUseAcpElicitation(params)) {
-                const response = await this.connection.request(
+                const response = await withSubagentUserAction(params.threadId, () => this.connection.request(
                     acp.methods.client.elicitation.create,
                     this.buildElicitationRequest(params, context),
-                    this.requestOptions(),
-                );
+                    this.requestOptions(signal),
+                ));
                 const result = this.convertElicitationResponse(response, context);
                 if (params.mode === "url" && result.action === "accept") {
                     this.trackUrlElicitation(params.threadId, params.elicitationId);
@@ -227,14 +227,15 @@ export class CodexElicitationHandler implements ElicitationHandler {
                 params.threadId,
                 params,
                 context,
-                () => this.permissionContext.nextStandaloneMcpToolCallId(params.serverName),
+                () => subagentToolCallId(params.threadId, params.serverName)
+                    ?? this.permissionContext.nextStandaloneMcpToolCallId(params.serverName),
                 this.renderer,
             );
-            const response = await this.connection.request(
+            const response = await withSubagentUserAction(params.threadId, () => this.connection.request(
                 acp.methods.client.session.requestPermission,
                 request,
-                this.requestOptions(),
-            );
+                this.requestOptions(signal),
+            ), request.toolCall.toolCallId);
             const result = convertMcpPermissionResponse(
                 response,
                 context.isToolApproval,
@@ -355,12 +356,13 @@ export class CodexElicitationHandler implements ElicitationHandler {
         params: ToolRequestUserInputParams
     ): Promise<acp.CreateElicitationResponse | null> {
         const request = this.buildUserInputRequest(params);
+        const signal = subagentInteractionSignal(params.threadId, this.cancellationSignal);
         if (params.autoResolutionMs === null) {
-            return await this.connection.request(
+            return await withSubagentUserAction(params.threadId, () => this.connection.request(
                 acp.methods.client.elicitation.create,
                 request,
-                this.requestOptions(),
-            );
+                this.requestOptions(signal),
+            ), params.itemId);
         }
 
         const abortController = new AbortController();
@@ -372,22 +374,22 @@ export class CodexElicitationHandler implements ElicitationHandler {
                 resolve(null);
             };
             timeout = setTimeout(resolveWithoutInput, Math.max(0, params.autoResolutionMs ?? 0));
-            if (this.cancellationSignal?.aborted) {
+            if (signal?.aborted) {
                 resolveWithoutInput();
                 return;
             }
-            if (this.cancellationSignal) {
-                this.cancellationSignal.addEventListener("abort", resolveWithoutInput, { once: true });
+            if (signal) {
+                signal.addEventListener("abort", resolveWithoutInput, { once: true });
                 removeAbortListener = () => {
-                    this.cancellationSignal?.removeEventListener("abort", resolveWithoutInput);
+                    signal.removeEventListener("abort", resolveWithoutInput);
                 };
             }
         });
-        const requestPromise = Promise.resolve(this.connection.request(
+        const requestPromise = withSubagentUserAction(params.threadId, () => this.connection.request(
             acp.methods.client.elicitation.create,
             request,
             this.requestOptions(abortController.signal),
-        ));
+        ), params.itemId, abortController.signal);
         void requestPromise.catch(() => {});
 
         try {
@@ -647,6 +649,16 @@ export class CodexElicitationHandler implements ElicitationHandler {
             sessionId,
             update: this.renderer.render(ElicitationReporter.accepted(context.correlatedCallId)),
         });
+    }
+
+    /**
+     * Completes every accepted URL elicitation: the app-server died and will never resolve them, so the client must
+     * not keep their flow open.
+     */
+    async completeAllUrlElicitations(): Promise<void> {
+        for (const threadId of [...this.pendingUrlElicitations.keys()]) {
+            await this.completeUrlElicitations(threadId);
+        }
     }
 
     private trackUrlElicitation(threadId: string, elicitationId: string): void {

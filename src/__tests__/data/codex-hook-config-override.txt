@@ -1,0 +1,1 @@
+hooks={ "PostToolUse" = [{ "matcher" = "Bash", "hooks" = [{ "type" = "command", "command" = "echo ready" }] }], "state" = { "sessionFlags:PostToolUse:0:0" = { "trusted_hash" = "precomputed-mj-hook-hash" } } }

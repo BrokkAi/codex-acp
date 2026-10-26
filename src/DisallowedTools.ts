@@ -1,4 +1,4 @@
-import {RequestError} from "@agentclientprotocol/sdk";
+import {RequestError} from "@agentclientprotocol/sdk/unstable";
 import type {JsonValue} from "./app-server/serde_json/JsonValue";
 
 export const CODEX_COLLABORATION_TOOL_NAMES = [

@@ -37,7 +37,7 @@ export class CommandReporter {
     private readonly standardStreamedCommands = new Set<string>();
 
     started(item: CommandItem): ToolFacts {
-        if (usesTerminal(item)) {
+        if (commandUsesTerminal(item)) {
             this.nonTerminalCommands.delete(item.id);
             this.terminalCommands.add(item.id);
         } else {
@@ -47,6 +47,18 @@ export class CommandReporter {
         this.streamedCommands.delete(item.id);
         this.standardStreamedCommands.delete(item.id);
         return startFacts(item);
+    }
+
+    /** Replay restores classification without forgetting bytes that already streamed live. */
+    restore(item: CommandItem): void {
+        if (item.status === "inProgress") {
+            if (!this.terminalCommands.has(item.id) && !this.nonTerminalCommands.has(item.id)) this.started(item);
+        } else {
+            this.nonTerminalCommands.delete(item.id);
+            this.terminalCommands.delete(item.id);
+            this.streamedCommands.delete(item.id);
+            this.standardStreamedCommands.delete(item.id);
+        }
     }
 
     /** A chunk of command output. AIR gets the output of a read, search or list command at the end. */
@@ -148,7 +160,7 @@ export class CommandReporter {
                 commandEnd: {
                     output: item.aggregatedOutput ?? "",
                     exitCode: item.exitCode,
-                    terminal: usesTerminal(item),
+                    terminal: commandUsesTerminal(item),
                     streamed: false,
                 },
             },
@@ -156,7 +168,8 @@ export class CommandReporter {
     }
 }
 
-function usesTerminal(item: CommandItem): boolean {
+/** A shell command shows a terminal. A single read, search or list command does not. */
+export function commandUsesTerminal(item: CommandItem): boolean {
     const action = singleAction(item.commandActions);
     return action === undefined || action.type === "unknown";
 }
@@ -215,7 +228,7 @@ function completionFacts(
         ...(name === undefined ? {} : {name}),
         status: toTerminalToolStatus(item.status),
     };
-    if (!usesTerminal(item)) {
+    if (!commandUsesTerminal(item)) {
         const viewedFile = singleAction(item.commandActions)?.type === "read";
         return output.length === 0 || viewedFile ? facts : {...facts, opaqueResult: output};
     }

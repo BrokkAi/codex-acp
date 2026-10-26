@@ -1,0 +1,44 @@
+{
+  "authRequired": {
+    "code": -32000,
+    "message": "Authentication required"
+  },
+  "login": {},
+  "codexRequests": [
+    {
+      "method": "account/login/start",
+      "params": {
+        "type": "apiKey",
+        "apiKey": "sk-test"
+      }
+    },
+    {
+      "method": "thread/start",
+      "params": {
+        "config": {
+          "features": {
+            "cwd_relative_turn_diffs": false
+          },
+          "skills": {
+            "config": [
+              {
+                "name": "visualize:visualize",
+                "enabled": false
+              }
+            ]
+          },
+          "projects": {
+            "/workspace": {
+              "trust_level": "trusted"
+            }
+          },
+          "approval_policy": "on-request",
+          "approvals_reviewer": "auto_review",
+          "sandbox_mode": "workspace-write"
+        },
+        "modelProvider": null,
+        "cwd": "/workspace"
+      }
+    }
+  ]
+}

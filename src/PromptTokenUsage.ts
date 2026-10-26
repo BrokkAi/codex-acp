@@ -1,82 +1,71 @@
-import type {Usage} from "@agentclientprotocol/sdk";
+import type {Usage} from "@agentclientprotocol/sdk/unstable";
+import {PromptTokenUsage as CodexPromptTokenUsage, toPromptUsage, toTokenCount, ZERO_TOKEN_COUNT, type TokenCount} from "./TokenCount";
 import type {TokenUsageBreakdown} from "./app-server/v2";
 
 export const USAGE_SCOPE_META_KEY = "mjolnir.dev/usage-scope";
-const COUNTERS = ["totalTokens", "inputTokens", "outputTokens", "cachedInputTokens", "cacheWriteInputTokens", "reasoningOutputTokens"] as const;
-const zero = (): TokenUsageBreakdown => ({totalTokens: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteInputTokens: 0, reasoningOutputTokens: 0});
 
-/** Thread counters outlive prompts. Only deltas attributed to this prompt enter its report. */
+/** Adds turn attribution and coverage to upstream's prompt-wide accumulator. */
 export class PromptTokenUsage {
-    private baseline: TokenUsageBreakdown | null;
-    private tokens: TokenUsageBreakdown | null = null;
+    private baseline: TokenCount | null;
+    private prompt: {status: "active" | "complete"; usage: CodexPromptTokenUsage} | null = null;
     private complete = true;
-    private active = false;
+    private reportedZero = false;
     private turns = new Map<string, boolean>();
 
-    constructor(freshThread: boolean) {
-        this.baseline = freshThread ? zero() : null;
+    constructor(start: boolean | TokenCount) {
+        this.baseline = typeof start === "boolean" ? (start ? ZERO_TOKEN_COUNT : null) : start;
     }
 
     beginPrompt(): void {
-        this.tokens = null;
-        this.complete = this.baseline !== null;
+        this.prompt = {status: "active", usage: new CodexPromptTokenUsage(this.baseline)};
+        this.complete = true;
+        this.reportedZero = false;
         this.turns.clear();
-        this.active = true;
     }
 
     beginTurn(turnId: string): void {
-        if (this.active && !this.turns.has(turnId)) this.turns.set(turnId, false);
+        if (this.prompt?.status === "active" && !this.turns.has(turnId)) this.turns.set(turnId, false);
     }
 
     endPrompt(): void {
-        this.active = false;
+        if (this.prompt) this.prompt.status = "complete";
         if ([...this.turns.values()].some(reported => !reported)) this.baseline = null;
     }
 
     observe(turnId: string, total: TokenUsageBreakdown, last: TokenUsageBreakdown): void {
-        const belongs = this.active && this.turns.has(turnId);
-        const previous = this.baseline;
-        this.baseline = {...total};
-        if (!belongs) {
-            // A concurrent unrelated turn breaks attribution for this prompt.
-            if (this.active) this.complete = false;
+        const valid = (count: TokenUsageBreakdown) => Object.values(count).every(value => Number.isSafeInteger(value) && value >= 0);
+        if (!valid(total) || !valid(last)) {
+            this.complete = false;
+            this.baseline = null;
+            return;
+        }
+        const converted = toTokenCount(total);
+        this.baseline = converted;
+        if (this.prompt?.status !== "active") return;
+        const current = this.prompt.usage;
+        if (!this.turns.has(turnId)) {
+            this.complete = false;
+            current.exclude(converted);
             return;
         }
         this.turns.set(turnId, true);
-        const delta = zero();
-        if (previous === null) {
-            this.complete = false;
-            Object.assign(delta, last);
-        } else {
-            for (const key of COUNTERS) delta[key] = total[key] - previous[key];
-        }
-        if (COUNTERS.some(key => !Number.isSafeInteger(delta[key]) || delta[key] < 0)) {
-            this.complete = false;
-            return;
-        }
-        this.tokens ??= zero();
-        for (const key of COUNTERS) {
-            const sum = this.tokens[key] + delta[key];
-            if (!Number.isSafeInteger(sum)) {
-                this.complete = false;
-                return;
-            }
-        }
-        for (const key of COUNTERS) this.tokens[key] += delta[key];
+        this.reportedZero ||= Object.values(total).every(value => value === 0);
+        current.observe(converted, toTokenCount(last));
+    }
+
+    observeModelOutput(): void {
+        if (this.prompt?.status === "active") this.prompt.usage.observeModelOutput();
+    }
+
+    usage(): TokenCount | null {
+        const usage = this.prompt?.usage.usage() ?? (this.reportedZero ? ZERO_TOKEN_COUNT : null);
+        return usage && Object.values(usage).every(value => Number.isSafeInteger(value) && value >= 0) ? usage : null;
     }
 
     report(): Usage | null {
-        const tokens = this.tokens;
-        if (tokens === null) return null;
-        const complete = this.complete && [...this.turns.values()].every(Boolean);
-        return {
-            totalTokens: tokens.totalTokens,
-            inputTokens: tokens.inputTokens,
-            outputTokens: tokens.outputTokens,
-            cachedReadTokens: tokens.cachedInputTokens,
-            cachedWriteTokens: tokens.cacheWriteInputTokens,
-            thoughtTokens: tokens.reasoningOutputTokens,
-            _meta: {[USAGE_SCOPE_META_KEY]: complete ? "turn" : "unspecified"},
-        };
+        const usage = this.usage();
+        if (usage === null) return null;
+        const complete = this.complete && this.prompt?.usage.hasCompleteBaseline() && [...this.turns.values()].every(Boolean);
+        return {...toPromptUsage(usage), _meta: {[USAGE_SCOPE_META_KEY]: complete ? "turn" : "unspecified"}};
     }
 }
