@@ -107,6 +107,14 @@ export function airCustomInstructions(meta: unknown): string | undefined {
     return typeof instructions === "string" ? instructions : undefined;
 }
 
+/** Read the goal policy applied before loading or resuming a stored session. */
+export function airGoalResumePolicy(meta: unknown): unknown {
+    const root = asRecord(meta);
+    const jetbrains = asRecord(root[JETBRAINS_META_KEY]);
+    const air = asRecord(jetbrains[AIR_META_KEY]);
+    return asRecord(air[AIR_GOAL_KEY])["resumePolicy"];
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
     return value !== null && typeof value === "object" && !Array.isArray(value)
         ? value as Record<string, unknown>

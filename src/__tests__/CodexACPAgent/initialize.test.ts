@@ -91,6 +91,7 @@ describe('CodexACPAgent - initialize', () => {
                         version: 1,
                         controlMethod: "_session/goal",
                         actions: ["set", "pause", "resume", "clear"],
+                        resumePolicies: ["preserve", "pause"],
                     },
                     capabilities: ["sessionFailure", "diffPatch", "agentFileChangeReport", "customInstructions", "nativeSubagentSessions", "asyncTasks", "recommendedValue", "rawInputRendering", "planContentDelta", "codexHooks"],
                 },

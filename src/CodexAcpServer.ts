@@ -216,6 +216,7 @@ import {
     AIR_META_KEY,
     AIR_SESSION_FAILURE_KEY,
     clientSupportsAirCapability,
+    airOnlyMeta,
     JETBRAINS_META_KEY,
 } from "./AirExtension";
 import {SessionIndexService} from "./SessionIndexService";
@@ -923,8 +924,6 @@ export class CodexAcpServer {
             },
             ...(this.clientCapabilities?._meta?.["execution"] ? {
                 execution: {version: 1},
-                goal: {version: GOAL_EXTENSION_VERSION, controlMethod: GOAL_CONTROL_METHOD,
-                    actions: [...GOAL_CONTROL_ACTIONS], resumePolicies: ["preserve", "pause"]},
             } : {}),
             ...(this.capabilities.airClient ? {
                 [JETBRAINS_META_KEY]: {
@@ -934,6 +933,7 @@ export class CodexAcpServer {
                             version: GOAL_EXTENSION_VERSION,
                             controlMethod: GOAL_CONTROL_METHOD,
                             actions: [...GOAL_CONTROL_ACTIONS],
+                            resumePolicies: ["preserve", "pause"],
                         },
                         [AIR_EXTENSION_CAPABILITIES_KEY]: airCapabilities,
                     },
@@ -1660,7 +1660,7 @@ export class CodexAcpServer {
         await this.codexAcpClient.waitForSessionNotifications(sessionId);
         if (state.goalRevision === revision) state.currentGoal = goal ? toThreadGoalSnapshot(goal) : null;
         return {
-            goal: state.currentGoal ?? null,
+            ...airOnlyMeta(state.clientCapabilities.airClient, AIR_GOAL_KEY, state.currentGoal ?? null),
             execution: {version: 1, revision: state.executionRevision ?? 0,
                 status: state.currentTurnId || ((state.executionRevision ?? 0) === executionRevision && thread.thread.status.type === "active") ? "running" : "idle",
                 turnId: state.currentTurnId},
@@ -3474,7 +3474,7 @@ export class CodexAcpServer {
             return;
         }
         sessionState.currentGoal = snapshot;
-        const update = goalSessionInfoUpdate(snapshot, sessionState.clientCapabilities.airClient, sessionState.executionUpdates);
+        const update = goalSessionInfoUpdate(snapshot, sessionState.clientCapabilities.airClient);
         if (update === null) return;
         await new ACPSessionConnection(this.connection, sessionState.sessionId).update(update);
     }

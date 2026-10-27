@@ -68,11 +68,11 @@ export function sameThreadGoalSnapshot(
         && left.createdAt === right.createdAt;
 }
 
-/** AIR and Mjolnir opt into their respective goal metadata formats. */
-export function goalSessionInfoUpdate(goal: ThreadGoalSnapshot | null, airClient: boolean, mjClient = false): UpdateSessionEvent | null {
-    if (!airClient && !mjClient) return null;
+/** Goal snapshots use the AIR namespace exclusively. */
+export function goalSessionInfoUpdate(goal: ThreadGoalSnapshot | null, airClient: boolean): UpdateSessionEvent | null {
+    if (!airClient) return null;
     return {
         sessionUpdate: "session_info_update",
-        _meta: {...(airClient ? withAirMeta(undefined, AIR_GOAL_KEY, goal) : {}), ...(mjClient ? {goal} : {})},
+        _meta: withAirMeta(undefined, AIR_GOAL_KEY, goal),
     };
 }

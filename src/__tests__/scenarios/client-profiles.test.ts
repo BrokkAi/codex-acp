@@ -188,7 +188,7 @@ describe("normalization of the recorded messages", () => {
     it("keeps every other id, version, path, and time", () => {
         const kept = [
             message("session/update", {update: {toolCallId: id, locations: [{path: "/elsewhere/App.ts"}]}}),
-            message("session/update", {update: {_meta: {goal: {createdAt: 1710000000, updatedAt: 1710000001}}}}),
+            message("session/update", {update: {_meta: {jetbrains: {air: {goal: {createdAt: 1710000000, updatedAt: 1710000001}}}}}}),
             {direction: "response", method: "session/new", params: {_meta: {version: "9.9.9"}}},
         ];
         expect(normalize(kept)).toEqual(kept);
@@ -716,7 +716,7 @@ describe("AIR", () => {
         const air = response("air", "command-output-stdin", "initialize")["_meta"]["jetbrains"]["air"];
         expect(air).toEqual({
             version: 1,
-            goal: {version: 1, controlMethod: "_session/goal", actions: ["set", "pause", "resume", "clear"]},
+            goal: {version: 1, controlMethod: "_session/goal", actions: ["set", "pause", "resume", "clear"], resumePolicies: ["preserve", "pause"]},
             capabilities: expect.any(Array),
         });
         expect([...air["capabilities"]].sort()).toEqual([...AIR_CAPABILITY_NAMES].sort());

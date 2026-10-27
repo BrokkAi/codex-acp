@@ -79,6 +79,10 @@
             "pause",
             "resume",
             "clear"
+          ],
+          "resumePolicies": [
+            "preserve",
+            "pause"
           ]
         },
         "capabilities": [

@@ -205,8 +205,6 @@ export class CodexEventHandler {
     private failure: RequestError | null = null;
     private terminalTurnError: {turnId: string; error: ErrorNotification["error"]} | null = null;
     private completedPlan: CompletedPlan | null = null;
-    private readonly activeImageGenerationItems = new Set<string>();
-    private readonly emittedImageViewItems = new Set<string>();
     private readonly session: ACPSessionConnection;
     private readonly renderer: AcpToolCallRenderer;
     private readonly itemStreams = new CodexItemStreamState();
@@ -246,11 +244,6 @@ export class CodexEventHandler {
         if (sessionState.sessionFailure !== undefined) {
             this.failuresById.set(sessionState.sessionFailure.id, sessionState.sessionFailure);
         }
-    }
-
-    beginPrompt(): void {
-        this.failure = null;
-        this.completedPlan = null;
     }
 
     getFailure(): RequestError | null {
@@ -877,7 +870,7 @@ export class CodexEventHandler {
         }
         this.sessionState.currentGoal = goalSnapshot;
 
-        return goalSessionInfoUpdate(goalSnapshot, this.sessionState.clientCapabilities.airClient, this.sessionState.executionUpdates);
+        return goalSessionInfoUpdate(goalSnapshot, this.sessionState.clientCapabilities.airClient);
     }
 
     private createThreadGoalClearedEvent(_event: ThreadGoalClearedNotification): UpdateSessionEvent | null {
@@ -887,7 +880,7 @@ export class CodexEventHandler {
         }
         this.sessionState.currentGoal = null;
 
-        return goalSessionInfoUpdate(null, this.sessionState.clientCapabilities.airClient, this.sessionState.executionUpdates);
+        return goalSessionInfoUpdate(null, this.sessionState.clientCapabilities.airClient);
     }
 
     private createReasoningDeltaEvent(

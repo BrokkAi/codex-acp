@@ -124,7 +124,8 @@ The `initialize` response carries the agent side of the extension only when the 
         "goal": {
           "version": 1,
           "controlMethod": "_session/goal",
-          "actions": ["set", "pause", "resume", "clear"]
+          "actions": ["set", "pause", "resume", "clear"],
+          "resumePolicies": ["preserve", "pause"]
         },
         "capabilities": [
           "sessionFailure",
@@ -210,7 +211,7 @@ The adapter sends these keys only to AIR. "AIR" in the gate column means that th
 | Key | Message and field path | Shape | Gate |
 | --- | --- | --- | --- |
 | `capabilities` | `initialize` response `_meta.jetbrains.air` | string array | AIR |
-| `goal` | `initialize` response `_meta.jetbrains.air` | `{version: 1, controlMethod, actions}` | AIR |
+| `goal` | `initialize` response `_meta.jetbrains.air` | `{version: 1, controlMethod, actions, resumePolicies}` | AIR |
 | `goal` | `session_info_update._meta.jetbrains.air` | goal snapshot or `null` | AIR |
 | `diffPatch` | tool call `content[]` of type `diff`, `_meta.jetbrains.air` | `{version: 1, format: "git_patch", text}` | `diffPatch` |
 | `contentDelta` | `plan_update._meta.jetbrains.air` | string | `planContentDelta` |
@@ -700,16 +701,24 @@ Another client gets no goal key and no `session_info_update` for a goal.
 The `initialize` response advertises the goal support:
 
 ```json
-{ "version": 1, "controlMethod": "_session/goal", "actions": ["set", "pause", "resume", "clear"] }
+{ "version": 1, "controlMethod": "_session/goal", "actions": ["set", "pause", "resume", "clear"], "resumePolicies": ["preserve", "pause"] }
 ```
 
 `actions` is the subset of `set`, `pause`, `resume`, and `clear` that the adapter supports.
 A client must not assume support for an action that is not advertised.
 
+The AIR goal capability always advertises `resumePolicies: ["preserve", "pause"]`.
+On session load/resume, `_meta.jetbrains.air.goal.resumePolicy: "pause"` pauses an active
+stored goal before native opening can start a continuation. Omitted or `"preserve"` policy
+keeps native behavior. The root `_meta.goal` spelling is not read or emitted.
+
 ### Control request
 
 The client sends `_session/goal` with `sessionId` and `action`.
 `set` also requires a non-blank `objective`.
+Pause/resume may include `expectedGoal: {objective, createdAt}` directly in the control request
+using the published identity; stale decisions are rejected. Identity-checked resume acknowledges
+execution start without waiting for the entire turn and avoids duplicate continuations.
 `/goal` stays the user-facing way to set, pause, resume, or clear a goal.
 The adapter still accepts `_codex/session/goal_control` as a legacy alias. It does not advertise the alias.
 
@@ -717,6 +726,12 @@ The adapter still accepts `_codex/session/goal_control` as a legacy alias. It do
 
 The adapter publishes the current snapshot in `session_info_update._meta.jetbrains.air.goal`.
 Clearing a goal publishes `goal: null`.
+For execution clients that also declare AIR, session new/load/resume responses carry the
+revision-fenced initial snapshot (or explicit null) at `_meta.jetbrains.air.goal`, alongside
+independent root `_meta.execution`. Notifications arriving during the read take precedence.
+A `limited` snapshot includes `limitReason: "usage"` (account usage limit) or `"budget"`
+(goal token budget). A spent budget wins even if Codex last reported an account limit.
+Identity-checked recovery resumes usage-limited goals and leaves spent budgets for the user.
 
 ```json
 {
@@ -1423,7 +1438,8 @@ AIR gets only the new key. A client that is not AIR gets neither the old key nor
 | Old key | New key |
 | --- | --- |
 | `agent_message_chunk._meta.codex.phase` | `_meta.jetbrains.air.phase`, same values |
-| `initialize._meta.goal`, `session_info_update._meta.goal` | `_meta.jetbrains.air.goal`, same shape |
+| `initialize._meta.goal`, `session_info_update._meta.goal`, session-open response `_meta.goal` | `_meta.jetbrains.air.goal`, including fork recovery fields |
+| load/resume request `_meta.goal.resumePolicy` | `_meta.jetbrains.air.goal.resumePolicy` |
 | mode `_meta.kind`, config option value `_meta.kind` | `_meta.jetbrains.air.kind` |
 | available command `_meta.commandAction` | `_meta.jetbrains.air.commandAction` |
 | tool call `_meta.contextCompaction` | `_meta.jetbrains.air.contextCompaction` |

@@ -76,7 +76,7 @@ import {
     isUnknownThreadError,
     threadActiveWriterRequestError,
 } from "./CodexThreadErrors";
-import {airCustomInstructions} from "./AirExtension";
+import {airCustomInstructions, airGoalResumePolicy} from "./AirExtension";
 import {changesSystemPrompt, clientSystemPromptText, type SessionInstructions} from "./ClientSystemPrompt";
 import {
     GatewayListingError,
@@ -700,8 +700,7 @@ export class CodexAcpClient {
         const disallowedTools = readDisallowedTools(request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
-        const goalPolicy = request._meta?.["goal"] as {resumePolicy?: string} | undefined;
-        if (goalPolicy?.resumePolicy === "pause") {
+        if (airGoalResumePolicy(request._meta) === "pause") {
             const goal = await this.getGoal(request.sessionId);
             if (goal?.status === "active") {
                 // This also works for an unloaded thread. Pause before resume
@@ -772,8 +771,7 @@ export class CodexAcpClient {
         const disallowedTools = readDisallowedTools(request._meta);
         await this.refreshSkills(request.cwd, additionalDirectories);
 
-        const goalPolicy = request._meta?.["goal"] as {resumePolicy?: string} | undefined;
-        if (goalPolicy?.resumePolicy === "pause") {
+        if (airGoalResumePolicy(request._meta) === "pause") {
             const goal = await this.getGoal(request.sessionId);
             if (goal?.status === "active") {
                 // This also works for an unloaded thread. Pause before resume

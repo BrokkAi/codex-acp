@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.0
+
+Merge upstream session batch lookup and session-list performance improvements. Use AIR as the sole goal metadata namespace: advertise resume policies, read pre-open resume policy, and publish live and revision-fenced initial snapshots under `_meta.jetbrains.air.goal`. Remove the root `_meta.goal` mirror while preserving identity-checked recovery, limit reasons, goal command acknowledgments, and independent root execution metadata. Remove unused event-handler merge residue.
+
 ## 1.14.1
 
 Always answer handled `/goal` commands when Codex does not route a turn, and ignore goal-control snapshots superseded by a newer action.

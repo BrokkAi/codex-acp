@@ -23,13 +23,13 @@ async function fixtureForGoal() {
         goal.value = {...goal.value, status: params.status ?? goal.value.status};
         return {goal: goal.value};
     });
-    vi.spyOn(app, "threadRead").mockResolvedValue({thread: {status: {type: "idle"}}} as ThreadReadResponse);
+    vi.spyOn(app, "threadRead").mockResolvedValue({thread: {status: {type: "idle"}, historyMode: "legacy", turns: []}} as unknown as ThreadReadResponse);
     const response = {
         thread: {id: sessionId, status: {type: "idle"}, turns: [], historyMode: "legacy"},
         model: "model-id", modelProvider: "openai", reasoningEffort: "medium",
     } as unknown as ThreadResumeResponse;
     vi.spyOn(app, "threadResume").mockResolvedValue(response);
-    await agent.initialize({protocolVersion: 1, clientCapabilities: {_meta: {execution: {version: 1}}}});
+    await agent.initialize({protocolVersion: 1, clientCapabilities: {_meta: {execution: {version: 1}, jetbrains: {air: {version: 1, capabilities: []}}}}});
     return {fixture, agent, client, app, goal, response};
 }
 
@@ -53,7 +53,7 @@ describe("goal recovery", () => {
         const result = await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: []});
         await client.waitForSessionNotifications(sessionId);
         expect(result._meta?.["execution"]).toMatchObject({status: "running", turnId: "autonomous"});
-        expect(result._meta?.["goal"]).toMatchObject({objective: storedGoal.objective, tokensUsed: 1234, tokenBudget: 9000});
+        expect(result._meta).toMatchObject({jetbrains: {air: {goal: {objective: storedGoal.objective, tokensUsed: 1234, tokenBudget: 9000}}}});
         const updates = fixture.getAcpConnectionEvents([]).filter(e => e.method === "sessionUpdate").map(e => e.args[0].update);
         expect(updates.filter(u => u.content?.text === text)).toHaveLength(1);
         fixture.sendServerNotification({method: "turn/completed", params: {threadId: sessionId,
@@ -63,15 +63,43 @@ describe("goal recovery", () => {
         await agent.closeSession({sessionId});
     });
 
-    it("pauses an active stored goal before explicit native resume", async () => {
+    it.each(["resume", "load"] as const)("pauses an active stored goal before native %s", async method => {
         const {agent, app, goal, response} = await fixtureForGoal();
         vi.mocked(app.threadResume).mockImplementation(async () => {
             expect(goal.value.status).toBe("paused");
             return response;
         });
-        const result = await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: [], _meta: {goal: {resumePolicy: "pause"}}});
-        expect(result._meta?.["goal"]).toMatchObject({status: "paused", tokensUsed: 1234, tokenBudget: 9000});
+        const request = {sessionId, cwd: "/workspace", mcpServers: [], _meta: {jetbrains: {air: {goal: {resumePolicy: "pause"}}}}};
+        const result = await (method === "load" ? agent.loadSession(request) : agent.resumeSession(request));
+        expect(result._meta).toMatchObject({jetbrains: {air: {goal: {status: "paused", tokensUsed: 1234, tokenBudget: 9000}}}});
+        expect(result._meta).not.toHaveProperty("goal");
         expect(app.threadGoalSet).toHaveBeenCalledWith({threadId: sessionId, status: "paused"});
+        await agent.closeSession({sessionId});
+    });
+
+    it("ignores the removed root resume policy", async () => {
+        const {agent, app, goal} = await fixtureForGoal();
+        await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: [], _meta: {goal: {resumePolicy: "pause"}}});
+        expect(goal.value.status).toBe("active");
+        expect(app.threadGoalSet).not.toHaveBeenCalled();
+        await agent.closeSession({sessionId});
+    });
+
+    it("keeps a live goal update ahead of an initial read", async () => {
+        const {fixture, agent, client} = await fixtureForGoal();
+        const current = {...storedGoal, status: "paused" as const, updatedAt: 120};
+        let reads = 0;
+        vi.mocked(client.getGoal).mockImplementation(async () => {
+            if (++reads === 1) {
+                fixture.sendServerNotification({method: "thread/goal/updated", params: {threadId: sessionId, goal: current}});
+            }
+            return storedGoal;
+        });
+        const result = await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: []});
+        expect(result._meta).toMatchObject({jetbrains: {air: {version: 1, goal: toThreadGoalSnapshot(current)}}});
+        expect(result._meta).not.toHaveProperty("goal");
+        const updates = fixture.getAcpConnectionEvents([]).filter(e => e.method === "sessionUpdate").map(e => e.args[0].update);
+        expect(updates).toContainEqual({sessionUpdate: "session_info_update", _meta: {jetbrains: {air: {version: 1, goal: toThreadGoalSnapshot(current)}}}});
         await agent.closeSession({sessionId});
     });
 
@@ -107,7 +135,7 @@ describe("goal recovery", () => {
         "does not reactivate a stored %s goal while opening", async status => {
             const {agent, app, goal} = await fixtureForGoal();
             goal.value.status = status;
-            await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: [], _meta: {goal: {resumePolicy: "pause"}}});
+            await agent.resumeSession({sessionId, cwd: "/workspace", mcpServers: [], _meta: {jetbrains: {air: {goal: {resumePolicy: "pause"}}}}});
             expect(app.threadGoalSet).not.toHaveBeenCalled();
             await agent.closeSession({sessionId});
         },
