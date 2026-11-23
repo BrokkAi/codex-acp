@@ -120,7 +120,7 @@ describe('CodexACPAgent - initialize', () => {
         ]));
     });
 
-    it('enables experimental thread settings without requesting attestation', async () => {
+    it('enables experimental notifications and filters raw items without requesting attestation', async () => {
         await agent.initialize({
             protocolVersion: acp.PROTOCOL_VERSION,
             clientCapabilities: {
@@ -131,6 +131,7 @@ describe('CodexACPAgent - initialize', () => {
         expect(mockCodexConnection.sendRequest).toHaveBeenCalledWith("initialize", expect.objectContaining({
             capabilities: {
                 experimentalApi: true,
+                optOutNotificationMethods: ["rawResponseItem/completed"],
                 requestAttestation: false,
             },
         }));

@@ -78,13 +78,17 @@ const TOKEN_COUNT_FIELDS = [
     "reasoningOutputTokens",
 ] as const satisfies ReadonlyArray<keyof TokenCount>;
 
-function combine(a: TokenCount, b: TokenCount, op: (x: number, y: number) => number): TokenCount {
+export function combineTokenCounts(a: TokenCount, b: TokenCount, op: (x: number, y: number) => number): TokenCount {
     const result = {} as TokenCount;
     for (const field of TOKEN_COUNT_FIELDS) result[field] = op(a[field], b[field]);
     return result;
 }
 
-function sameCount(a: TokenCount, b: TokenCount): boolean {
+export function isValidTokenCount(count: TokenCount): boolean {
+    return TOKEN_COUNT_FIELDS.every(field => Number.isSafeInteger(count[field]) && count[field] >= 0);
+}
+
+export function sameCount(a: TokenCount, b: TokenCount): boolean {
     return TOKEN_COUNT_FIELDS.every(field => a[field] === b[field]);
 }
 
@@ -133,7 +137,7 @@ export class PromptTokenUsage {
         if (previous !== null && TOKEN_COUNT_FIELDS.some(field => total[field] < previous[field])) {
             this.totalWentBack = true;
         }
-        this.summedLast = this.summedLast === null ? {...last} : combine(this.summedLast, last, (x, y) => x + y);
+        this.summedLast = this.summedLast === null ? {...last} : combineTokenCounts(this.summedLast, last, (x, y) => x + y);
         this.previousTotal = total;
         this.latestTotal = total;
     }
@@ -141,9 +145,9 @@ export class PromptTokenUsage {
     /** Advance past work that belongs to another turn without charging it to this prompt. */
     exclude(total: TokenCount): void {
         if (this.previousTotal !== null && this.startTotal !== null) {
-            const skipped = combine(total, this.previousTotal, (x, y) => x - y);
+            const skipped = combineTokenCounts(total, this.previousTotal, (x, y) => x - y);
             if (TOKEN_COUNT_FIELDS.some(field => skipped[field] < 0)) this.totalWentBack = true;
-            this.startTotal = combine(this.startTotal, skipped, (x, y) => x + y);
+            this.startTotal = combineTokenCounts(this.startTotal, skipped, (x, y) => x + y);
         }
         this.previousTotal = total;
         if (this.latestTotal !== null) this.latestTotal = total;
@@ -160,7 +164,7 @@ export class PromptTokenUsage {
         const latest = this.latestTotal;
         if (latest === null) return null;
         if (start !== null && !this.totalWentBack) {
-            return combine(latest, start, (x, y) => x - y);
+            return combineTokenCounts(latest, start, (x, y) => x - y);
         }
         return this.summedLast;
     }

@@ -587,14 +587,23 @@ export class CodexEventHandler {
                 return this.plans.delta(notification.params.itemId, notification.params.delta);
             case "item/started": {
                 this.completeRetryIncidentOnTurnProgress(notification.params.threadId);
+                const {threadId, turnId, item} = notification.params;
+                if (threadId === this.sessionState.sessionId && item.type === "contextCompaction") {
+                    this.sessionState.promptTokenUsage.beginCompaction(turnId, item.id);
+                }
                 const update = await this.createItemEvent(notification.params);
                 this.trackOpenToolCall(notification.params.item, notification.params.threadId, notification.params.turnId);
                 return update;
             }
-            case "item/completed":
-                this.completeRetryIncidentOnTurnProgress(notification.params.threadId);
-                this.openToolCalls(notification.params.threadId).complete(notification.params.item.id);
+            case "item/completed": {
+                const {threadId, turnId, item} = notification.params;
+                if (threadId === this.sessionState.sessionId && item.type === "contextCompaction") {
+                    this.sessionState.promptTokenUsage.finishCompaction(turnId, item.id);
+                }
+                this.completeRetryIncidentOnTurnProgress(threadId);
+                this.openToolCalls(threadId).complete(item.id);
                 return await this.completeItemEvent(notification.params);
+            }
             case "turn/plan/updated":
                 this.completeRetryIncidentOnTurnProgress(notification.params.threadId);
                 return await this.updatePlan(notification.params);
@@ -704,7 +713,17 @@ export class CodexEventHandler {
                 return this.renderer.render(this.streamsFor(notification.params.threadId).guardianReviews.started(notification.params));
             case "item/autoApprovalReview/completed":
                 return this.renderer.render(this.streamsFor(notification.params.threadId).guardianReviews.completed(notification.params));
+            case "rawResponse/completed": {
+                const {threadId, turnId, responseId, usage} = notification.params;
+                if (threadId === this.sessionState.sessionId) {
+                    this.sessionState.promptTokenUsage.observeRawResponse(turnId, responseId, usage);
+                }
+                return null;
+            }
             case "thread/compacted":
+                if (notification.params.threadId === this.sessionState.sessionId) {
+                    this.sessionState.promptTokenUsage.finishCompaction(notification.params.turnId);
+                }
                 return this.supportsCompaction
                     ? this.sessionState.compactions.completeLegacy(
                         this.subagents.notificationSessionId(notification), notification.params.turnId,
@@ -785,7 +804,6 @@ export class CodexEventHandler {
             case "mcpServer/oauthLogin/completed":
             case "externalAgentConfig/import/completed":
             case "rawResponseItem/completed":
-            case "rawResponse/completed":
             case "thread/started":
             case "remoteControl/status/changed":
             case "app/list/updated":
@@ -1365,11 +1383,8 @@ export class CodexEventHandler {
 }
 
 /**
- * Items that Codex reports for the input of a turn, for other agents, or before a model request, rather than
- * as output of its model. Codex starts a context compaction before its request, which can send the
- * current usage again. When a compaction is the first request of a prompt on a thread with an unknown
- * start total and nothing was sent again before it, its own usage is taken as the start total; that
- * undercount is the lesser error compared with counting the history's last request.
+ * Items other than model output. A compaction can start before Codex resends the thread's
+ * previous usage, so its start alone does not identify a new model response.
  */
 const NON_MODEL_OUTPUT_ITEM_TYPES: ReadonlySet<ThreadItem["type"]> = new Set([
     "userMessage",

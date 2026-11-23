@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.15.1
+
+Count native remote compaction usage in Codex prompt totals (BrokkAi/mjolnir#1122). Request `experimentalRawEvents` while opting out of `rawResponseItem/completed`, reconcile `rawResponse/completed` usage against `thread/tokenUsage/updated` during root-thread `contextCompaction` intervals without double-counting local compaction, and report `mjolnir.dev/usage-scope: "unspecified"` when compaction usage cannot be measured (including leading compaction before a resumed baseline is known).
+
 ## 1.15.0
 
 Merge upstream session batch lookup and session-list performance improvements. Use AIR as the sole goal metadata namespace: advertise resume policies, read pre-open resume policy, and publish live and revision-fenced initial snapshots under `_meta.jetbrains.air.goal`. Remove the root `_meta.goal` mirror while preserving identity-checked recovery, limit reasons, goal command acknowledgments, and independent root execution metadata. Remove unused event-handler merge residue.

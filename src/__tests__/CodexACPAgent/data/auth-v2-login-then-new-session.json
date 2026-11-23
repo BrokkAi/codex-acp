@@ -37,7 +37,8 @@
           "sandbox_mode": "workspace-write"
         },
         "modelProvider": null,
-        "cwd": "/workspace"
+        "cwd": "/workspace",
+        "experimentalRawEvents": true
       }
     }
   ]

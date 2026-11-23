@@ -210,6 +210,7 @@ export class CodexAcpClient {
         const response = await this.codexClient.initialize({
             capabilities: {
                 experimentalApi: true,
+                optOutNotificationMethods: ["rawResponseItem/completed"],
                 requestAttestation: false,
             },
             clientInfo: {

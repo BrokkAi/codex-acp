@@ -672,7 +672,7 @@ export class CodexAppServerClient {
     }
 
     async threadStart(params: ThreadStartParams): Promise<ThreadStartResponse> {
-        return await this.sendRequest({ method: "thread/start", params: params });
+        return await this.sendRequest({method: "thread/start", params: {...params, ...RAW_RESPONSE_EVENTS}});
     }
 
     async threadSetName(params: ThreadSetNameParams): Promise<ThreadSetNameResponse> {
@@ -680,11 +680,11 @@ export class CodexAppServerClient {
     }
 
     async threadResume(params: ThreadResumeParams): Promise<ThreadResumeResponse> {
-        return await this.sendRequest({ method: "thread/resume", params: params });
+        return await this.sendRequest({method: "thread/resume", params: {...params, ...RAW_RESPONSE_EVENTS}});
     }
 
     async threadFork(params: ThreadForkParams): Promise<ThreadForkResponse> {
-        return await this.sendRequest({ method: "thread/fork", params: params });
+        return await this.sendRequest({method: "thread/fork", params: {...params, ...RAW_RESPONSE_EVENTS}});
     }
 
     getThreadSettings(threadId: string): ThreadSettings | undefined {
@@ -1358,6 +1358,9 @@ export type CodexConnectionEvent =
 export type CompactionCompletedNotification =
     | { method: "thread/compacted", params: Extract<ServerNotification, { method: "thread/compacted" }>["params"] }
     | { method: "item/completed", params: ItemCompletedNotification & { item: Extract<ItemCompletedNotification["item"], { type: "contextCompaction" }> } };
+
+// The stable generated schema omits the app-server's experimental thread fields.
+const RAW_RESPONSE_EVENTS = {experimentalRawEvents: true};
 
 type CodexRequest = DistributiveOmit<ClientRequest, "id"> | ThreadBackgroundTerminalsRequest
 

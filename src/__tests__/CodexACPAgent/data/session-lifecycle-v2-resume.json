@@ -185,7 +185,8 @@
         },
         "cwd": "/workspace",
         "modelProvider": "openai",
-        "threadId": "thread-1"
+        "threadId": "thread-1",
+        "experimentalRawEvents": true
       }
     }
   ],

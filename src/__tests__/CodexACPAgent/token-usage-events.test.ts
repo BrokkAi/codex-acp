@@ -423,7 +423,7 @@ describe('Token Usage Events', () => {
             expect(response.usage?.totalTokens).toBe(300);
         });
 
-        it('counts the compaction of a resumed thread but not the history sent again before it', async () => {
+        it('reports partial usage when compaction starts before the resumed baseline is known', async () => {
             const prompt = setupPrompts([[
                 {
                     method: 'item/started',
@@ -448,7 +448,10 @@ describe('Token Usage Events', () => {
 
             const response = await prompt();
 
-            expect(response.usage?.totalTokens).toBe(2000);
+            expect(response.usage).toMatchObject({
+                totalTokens: 2000,
+                _meta: {'mjolnir.dev/usage-scope': 'unspecified'},
+            });
         });
 
         it('counts the first request of a new thread even before its output is reported', async () => {
